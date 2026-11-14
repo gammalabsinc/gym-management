@@ -5,7 +5,7 @@ export default defineConfig({
     projects: ["apps/*", "packages/*"],
     coverage: {
       provider: "v8",
-      include: ["apps/*/src/**/*.ts", "packages/*/src/**/*.ts"],
+      include: ["apps/*/src/**/*.{ts,tsx}", "packages/*/src/**/*.{ts,tsx}"],
       exclude: ["**/*.test.ts", "**/*.d.ts"],
       reporter: ["text-summary", "lcov"],
       reportsDirectory: "coverage",
