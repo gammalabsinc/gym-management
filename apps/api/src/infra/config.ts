@@ -12,6 +12,7 @@ const envSchema = z
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
     DATABASE_URL: z.url(),
+    MIGRATOR_DATABASE_URL: z.url().optional(),
   })
   .transform(
     (env): Config => ({
@@ -20,6 +21,9 @@ const envSchema = z
       port: env.PORT,
       logLevel: env.LOG_LEVEL,
       databaseUrl: env.DATABASE_URL,
+      ...(env.MIGRATOR_DATABASE_URL === undefined
+        ? {}
+        : { migratorDatabaseUrl: env.MIGRATOR_DATABASE_URL }),
     }),
   );
 
@@ -51,5 +55,9 @@ export function loadConfig(): Config {
 
 /** The only form of config that may be logged. */
 export function redactConfig(config: Config): Record<string, unknown> {
-  return { ...config, databaseUrl: REDACTED };
+  return {
+    ...config,
+    databaseUrl: REDACTED,
+    ...(config.migratorDatabaseUrl === undefined ? {} : { migratorDatabaseUrl: REDACTED }),
+  };
 }

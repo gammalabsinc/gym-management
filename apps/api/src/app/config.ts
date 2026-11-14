@@ -10,4 +10,6 @@ export interface Config {
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly databaseUrl: string;
+  /** Only the migrate mode needs it. The app role in databaseUrl cannot change the schema. */
+  readonly migratorDatabaseUrl?: string;
 }
