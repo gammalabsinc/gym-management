@@ -17,6 +17,28 @@ function problemsOf(env: Record<string, string | undefined>): readonly string[] 
   throw new Error("expected parseConfig to throw");
 }
 
+describe("MIGRATOR_DATABASE_URL", () => {
+  it("is optional and left out when unset", () => {
+    expect(parseConfig(validEnv)).not.toHaveProperty("migratorDatabaseUrl");
+  });
+
+  it("is read when set and redacted for logs", () => {
+    const config = parseConfig({
+      ...validEnv,
+      MIGRATOR_DATABASE_URL: "postgres://migrator:pw@localhost/gym",
+    });
+    expect(config.migratorDatabaseUrl).toBe("postgres://migrator:pw@localhost/gym");
+    expect(JSON.stringify(redactConfig(config))).not.toContain("pw@");
+    expect(redactConfig(config)).toMatchObject({ migratorDatabaseUrl: "[redacted]" });
+  });
+
+  it("must be a url", () => {
+    expect(problemsOf({ ...validEnv, MIGRATOR_DATABASE_URL: "nope" })).toEqual([
+      expect.stringMatching(/^MIGRATOR_DATABASE_URL: /),
+    ]);
+  });
+});
+
 describe("parseConfig", () => {
   it("applies defaults", () => {
     expect(parseConfig(validEnv)).toEqual({
