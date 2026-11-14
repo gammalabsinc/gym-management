@@ -11,6 +11,7 @@ COPY packages/boundaries/package.json packages/boundaries/package.json
 COPY packages/graphql-schema/package.json packages/graphql-schema/package.json
 RUN pnpm install --frozen-lockfile --filter @gym/api...
 COPY tsconfig.base.json ./
+COPY packages/graphql-schema packages/graphql-schema
 COPY apps/api apps/api
 RUN pnpm --filter @gym/api run build \
  && pnpm --filter @gym/api deploy --prod --legacy /out \

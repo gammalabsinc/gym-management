@@ -1,2 +1,2 @@
-// The GraphQL schema file and generated types land here in later tickets.
-export {};
+export { typeDefs } from "./generated/schema";
+export type * from "./generated/types";

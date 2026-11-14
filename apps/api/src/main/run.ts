@@ -19,7 +19,7 @@ export function run(deps: RunDeps): Server {
     return deps.exit(1);
   }
   const app = composeApp({ config, write: deps.write });
-  const server = createHttpServer();
+  const server = createHttpServer({ graphql: app.graphql });
   server.listen(config.port, () => {
     app.logger.info("api listening", { port: config.port, mode: config.mode });
   });
