@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Required check. One commit per PR, no merge commits, rebased on the tip of main.
+  history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Fetch base
+        run: git fetch --no-tags origin "${{ github.base_ref }}"
+      - name: Check history shape
+        run: bash scripts/check-history.sh "origin/${{ github.base_ref }}" "${{ github.event.pull_request.head.sha }}"
+
+  # Required check. Fails closed: if the package scripts below do not exist, this job fails.
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gym_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/gym_test
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Fetch base
+        run: git fetch --no-tags origin "${{ github.base_ref }}"
+      - uses: pnpm/action-setup@v4 # version comes from the packageManager field in package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run typecheck
+      # Runs every workspace with thresholds of 90 percent, writes a merged coverage/lcov.info with repo root relative paths.
+      - run: pnpm run test:coverage
+      - name: Coverage report must exist
+        run: test -s coverage/lcov.info
+      - name: Changed lines must be at least 90 percent covered
+        run: |
+          python3 -m pip install --user "diff-cover==9.*"
+          python3 -m diff_cover.diff_cover_tool coverage/lcov.info \
+            --compare-branch="origin/${{ github.base_ref }}" \
+            --fail-under=90
