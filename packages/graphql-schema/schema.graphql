@@ -1,0 +1,394 @@
+# Single source of truth for the API schema. The server resolver types and the mobile
+# client types are both generated from this file. Keep it in step with the GraphQL API tab.
+
+scalar DateTime
+scalar Date
+scalar JSON # used in one place only: read only audit snapshots
+
+enum Role {
+  OWNER
+  STAFF
+  MEMBER
+}
+enum MemberStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+enum Standing {
+  PAID
+  DUE_SOON
+  OVERDUE
+  INACTIVE
+}
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+}
+enum InvoiceLineType {
+  MEMBERSHIP
+  ADMISSION
+  DISCOUNT
+}
+enum DiscountKind {
+  REFERRAL
+  MANUAL
+}
+enum ReferralSide {
+  REFERRER
+  REFERRED
+}
+enum ScanSource {
+  STAFF_APP
+  MANUAL
+}
+enum ErrorCode {
+  NOT_FOUND
+  FORBIDDEN
+  INVALID_INPUT
+  CONFLICT
+  LAST_OWNER
+  ALREADY_VOID
+  HAS_ALLOCATIONS
+}
+
+input PageInput {
+  limit: Int = 50
+  cursor: String
+}
+type UserError {
+  code: ErrorCode!
+  field: String
+  message: String!
+}
+
+type Branding {
+  logoUrl: String
+  primaryColor: String
+  contactPhone: String
+  contactEmail: String
+  contactAddress: String
+}
+type TenantSettings {
+  warnDaysBefore: Int!
+  redDaysAfter: Int!
+  dupWindowMin: Int!
+  referrerAmount: Int!
+  referrerIsRecurring: Boolean!
+  referredAmount: Int!
+  referredIsRecurring: Boolean!
+}
+type Tenant {
+  id: ID!
+  name: String!
+  subdomain: String!
+  timezone: String!
+  currency: String!
+  branding: Branding!
+  settings: TenantSettings!
+}
+type PublicTenant {
+  name: String!
+  branding: Branding!
+}
+type Gym {
+  tenantId: ID!
+  name: String!
+  logoUrl: String
+  roles: [Role!]!
+}
+
+type Me {
+  userId: ID!
+  name: String
+  email: String!
+  roles: [Role!]!
+  permissions: [String!]!
+  memberId: ID
+}
+type StaffUser {
+  userId: ID!
+  name: String
+  email: String!
+  roles: [Role!]!
+}
+
+type Plan {
+  id: ID!
+  key: String!
+  name: String!
+  admissionFee: Int!
+  monthlyFee: Int!
+  isActive: Boolean!
+}
+
+type Member {
+  id: ID!
+  memberNo: String!
+  barcode: String!
+  name: String
+  email: String!
+  phone: String
+  photoRef: String
+  status: MemberStatus!
+  plan: Plan!
+  joinedOn: Date!
+  leftOn: Date
+  billingDay: Int!
+  referredBy: Member
+  # derived
+  paidThrough: Date
+  standing: Standing!
+  balanceDue: Int!
+  credit: Int!
+  visitsThisMonth: Int!
+  visitsLastMonth: Int!
+  totalPaid: Int!
+}
+
+type Invoice {
+  id: ID!
+  memberId: ID!
+  periodStart: Date!
+  periodEnd: Date!
+  dueDate: Date!
+  total: Int!
+  amountDue: Int!
+  isPaid: Boolean!
+  isVoid: Boolean!
+  voidReason: String
+  lines: [InvoiceLine!]!
+}
+type InvoiceLine {
+  id: ID!
+  lineType: InvoiceLineType!
+  description: String!
+  amount: Int!
+  discountId: ID
+}
+
+type Payment {
+  id: ID!
+  memberId: ID!
+  amount: Int!
+  method: PaymentMethod!
+  paidOn: Date!
+  submittedAt: DateTime!
+  proofLink: String
+  recordedBy: ID!
+  isVoid: Boolean!
+  voidReason: String
+  allocations: [Allocation!]!
+}
+type Allocation {
+  invoiceId: ID!
+  amount: Int!
+}
+type PaymentPreview {
+  allocations: [Allocation!]!
+  paidThroughAfter: Date
+  creditAfter: Int!
+}
+
+type Discount {
+  id: ID!
+  memberId: ID!
+  kind: DiscountKind!
+  referralSide: ReferralSide
+  sourceMember: Member
+  amount: Int!
+  isRecurring: Boolean!
+  reason: String
+  startsOn: Date!
+  endsOn: Date
+  isConsumed: Boolean!
+  isActive: Boolean!
+}
+
+type Visit {
+  id: ID!
+  memberId: ID!
+  scannedAt: DateTime!
+  localDate: Date!
+  isDuplicate: Boolean!
+  statusAtScan: Standing!
+  source: ScanSource!
+}
+
+type MembershipPeriod {
+  id: ID!
+  memberId: ID!
+  planId: ID!
+  status: MemberStatus!
+  validFrom: Date!
+  validTo: Date
+  reason: String
+  changedBy: ID
+}
+
+type AuditEvent {
+  id: ID!
+  occurredAt: DateTime!
+  actorUserId: ID
+  action: String!
+  entityType: String!
+  entityId: ID!
+  before: JSON
+  after: JSON
+}
+
+type MemberPage {
+  items: [Member!]!
+  nextCursor: String
+}
+type InvoicePage {
+  items: [Invoice!]!
+  nextCursor: String
+}
+type PaymentPage {
+  items: [Payment!]!
+  nextCursor: String
+}
+type VisitPage {
+  items: [Visit!]!
+  nextCursor: String
+}
+type AuditEventPage {
+  items: [AuditEvent!]!
+  nextCursor: String
+}
+
+type Query {
+  publicTenant(subdomain: String!): PublicTenant # public, name and branding only, rate limited
+  myGyms: [Gym!]! # identity session, gyms where the signed in email has an active user row
+
+  me: Me!
+  tenant: Tenant!
+  plans: [Plan!]!
+
+  members(search: String, page: PageInput): MemberPage! # members.read, overdue first, search matches name, email, memberNo, barcode
+  member(id: ID!): Member # members.read, or own record
+  invoices(memberId: ID!, page: PageInput): InvoicePage! # invoices.read, or own record
+  payments(memberId: ID!, page: PageInput): PaymentPage! # payments.read, or own record
+  discounts(memberId: ID!): [Discount!]! # discounts.read, or own record
+  visits(memberId: ID!, page: PageInput): VisitPage! # attendance.read, or own record
+  membershipPeriods(memberId: ID!): [MembershipPeriod!]! # members.read, newest first
+  previewPayment(memberId: ID!, amount: Int!): PaymentPreview! # payments.write, writes nothing
+
+  staff: [StaffUser!]! # roles.write
+  auditEvents(entityType: String, entityId: ID, page: PageInput): AuditEventPage! # audit.read
+}
+
+input MemberInput {
+  name: String!
+  email: String!
+  phone: String
+  photoRef: String
+  planId: ID!
+  joinedOn: Date!
+  referredById: ID
+}
+input MemberPatch {
+  name: String
+  phone: String
+  photoRef: String
+  status: MemberStatus
+  reason: String
+}
+input RecordPaymentInput {
+  clientRequestId: ID!
+  memberId: ID!
+  amount: Int!
+  method: PaymentMethod!
+  paidOn: Date
+  proofLink: String
+}
+input DiscountInput {
+  memberId: ID!
+  amount: Int!
+  isRecurring: Boolean!
+  reason: String!
+  startsOn: Date
+}
+input PlanInput {
+  name: String!
+  admissionFee: Int!
+  monthlyFee: Int!
+}
+input SettingsInput {
+  warnDaysBefore: Int
+  redDaysAfter: Int
+  dupWindowMin: Int
+  referrerAmount: Int
+  referrerIsRecurring: Boolean
+  referredAmount: Int
+  referredIsRecurring: Boolean
+}
+
+type Mutation {
+  selectGym(tenantId: ID!): SelectGymPayload! # identity session
+
+  recordScan(barcode: String!, source: ScanSource = STAFF_APP): ScanPayload! # scan.checkin
+
+  createMember(input: MemberInput!): MemberPayload! # members.write
+  updateMember(id: ID!, patch: MemberPatch!): MemberPayload! # members.write
+
+  recordPayment(input: RecordPaymentInput!): PaymentPayload! # payments.write
+  voidPayment(id: ID!, reason: String!): PaymentPayload! # payments.void
+  voidInvoice(id: ID!, reason: String!): InvoicePayload! # invoices.void
+
+  addDiscount(input: DiscountInput!): DiscountPayload! # discounts.write, creates a manual discount
+  endDiscount(id: ID!, reason: String!): DiscountPayload! # discounts.write
+
+  updatePlan(id: ID!, input: PlanInput!): PlanPayload! # settings.write
+  updateSettings(input: SettingsInput!): TenantPayload! # settings.write
+
+  inviteUser(email: String!, name: String, role: Role!): StaffPayload! # roles.write
+  setRole(userId: ID!, role: Role!, isOn: Boolean!): StaffPayload! # roles.write
+}
+
+type SelectGymPayload {
+  me: Me
+  tenant: Tenant
+  errors: [UserError!]!
+}
+type ScanPayload {
+  visit: Visit
+  member: Member
+  errors: [UserError!]!
+}
+type MemberPayload {
+  member: Member
+  errors: [UserError!]!
+}
+type PaymentPayload {
+  payment: Payment
+  member: Member
+  errors: [UserError!]!
+}
+type InvoicePayload {
+  invoice: Invoice
+  errors: [UserError!]!
+}
+type DiscountPayload {
+  discount: Discount
+  errors: [UserError!]!
+}
+type PlanPayload {
+  plan: Plan
+  errors: [UserError!]!
+}
+type TenantPayload {
+  tenant: Tenant
+  errors: [UserError!]!
+}
+type StaffPayload {
+  user: StaffUser
+  errors: [UserError!]!
+}
+
+# Not in the GraphQL API tab yet. The one operation GYM-9 adds, for liveness checks.
+extend type Query {
+  health: String! # no permission needed, always "ok" while the server is up
+}
