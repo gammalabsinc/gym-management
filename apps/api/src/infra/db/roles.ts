@@ -46,6 +46,8 @@ END $$`,
     `ALTER SCHEMA public OWNER TO ${MIGRATOR_ROLE}`,
     "REVOKE ALL ON SCHEMA public FROM PUBLIC",
     `GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`,
+    // The no overlap constraint on membership_periods needs it, and only an administrator can create it.
+    "CREATE EXTENSION IF NOT EXISTS btree_gist",
   ];
 }
 

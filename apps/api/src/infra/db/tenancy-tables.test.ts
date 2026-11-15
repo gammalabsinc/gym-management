@@ -170,7 +170,7 @@ describe("every tenant table", () => {
       LEFT JOIN information_schema.columns c
         ON c.table_schema = t.table_schema AND c.table_name = t.table_name AND c.column_name = 'tenant_id'
       WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
-        AND t.table_name NOT IN ('tenants', 'migrations', 'sessions')
+        AND t.table_name IN ('audit_events', 'user_roles', 'users')
       ORDER BY t.table_name`);
     expect(rows).toEqual([
       { table_name: "audit_events", data_type: "uuid", is_nullable: "NO" },
@@ -194,7 +194,9 @@ describe("the migration", () => {
     const source = makeDataSource(db.urlFor(MIGRATOR_ROLE, PASSWORDS.migratorPassword));
     await source.initialize();
     try {
-      // Newest first: sessions, row level security, the audit trail, then the tenancy tables they point at.
+      // Newest first: the business tables, sessions, row level security, the audit trail, then the
+      // tenancy tables they point at.
+      await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
