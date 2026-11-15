@@ -1,9 +1,11 @@
 import type { Server } from "node:http";
 import type { Config } from "../app/config";
 import type { Env } from "../infra/config";
+import type { Database } from "../infra/db/connection";
 import { bootConfig } from "./boot";
 import { composeApp } from "./compose";
 import { createHttpServer } from "./server";
+import { makeShutdown } from "./shutdown";
 
 export interface RunDeps {
   readonly env: Env;
@@ -12,11 +14,36 @@ export interface RunDeps {
   readonly exit: (code: number) => never;
   /** Runs pending migrations as the migrator role and returns their names. */
   readonly migrate: (migratorDatabaseUrl: string) => Promise<readonly string[]>;
+  /** Opens the app role pool. */
+  readonly connect: (databaseUrl: string) => Promise<Database>;
+  /** Registers a handler for a process signal. */
+  readonly onSignal: (signal: "SIGTERM" | "SIGINT", handler: () => void) => void;
 }
 
-function startApi(config: Config, deps: RunDeps): Server {
+const DRAIN_TIMEOUT_MS = 25_000;
+
+async function startApi(config: Config, deps: RunDeps): Promise<Server> {
   const app = composeApp({ config, write: deps.write });
-  const server = createHttpServer({ graphql: app.graphql });
+  const database = await deps.connect(config.databaseUrl);
+  let shutdown: ReturnType<typeof makeShutdown> | undefined;
+  const server = createHttpServer({
+    graphql: app.graphql,
+    isReady: async () => {
+      if (shutdown?.draining() === true) return false;
+      await database.ping();
+      return true;
+    },
+  });
+  shutdown = makeShutdown({
+    server,
+    close: () => database.close(),
+    log: (message) => app.logger.info(message),
+    exit: (code) => deps.exit(code),
+    timeoutMs: DRAIN_TIMEOUT_MS,
+  });
+  const begin = (signal: "SIGTERM" | "SIGINT") => () => void shutdown?.begin(signal);
+  deps.onSignal("SIGTERM", begin("SIGTERM"));
+  deps.onSignal("SIGINT", begin("SIGINT"));
   server.listen(config.port, () => {
     app.logger.info("api listening", { port: config.port, mode: config.mode });
   });
