@@ -14,14 +14,33 @@ function makeDeps(env: Record<string, string | undefined>) {
     throw new ExitSignal(`exit ${code}`);
   });
   const migrate = vi.fn(async (_url: string): Promise<readonly string[]> => ["First1", "Second2"]);
+  const database = { ping: vi.fn(async () => {}), close: vi.fn(async () => {}) };
+  const connect = vi.fn(async (_url: string) => database);
+  const handlers = new Map<string, () => void>();
+  const onSignal = vi.fn((signal: string, handler: () => void) => {
+    handlers.set(signal, handler);
+  });
   return {
-    deps: { env, write: (line: string) => lines.push(line), writeError, exit, migrate },
+    deps: {
+      env,
+      write: (line: string) => lines.push(line),
+      writeError,
+      exit,
+      migrate,
+      connect,
+      onSignal,
+    },
+    database,
+    connect,
+    handlers,
     lines,
     writeError,
     exit,
     migrate,
   };
 }
+
+const exitCodes: number[] = [];
 
 afterEach(async () => {
   await Promise.all(
@@ -46,6 +65,63 @@ describe("run in api mode", () => {
       mode: "api",
     });
     expect(migrate).not.toHaveBeenCalled();
+  });
+
+  it("connects to the database with the app url before listening", async () => {
+    const { deps, connect } = makeDeps({ DATABASE_URL, PORT: "38272" });
+    const server = await run(deps);
+    if (server !== null) servers.push(server);
+    expect(connect).toHaveBeenCalledWith(DATABASE_URL);
+  });
+
+  it("reports ready while the database answers and not ready when it does not", async () => {
+    const { deps, database } = makeDeps({ DATABASE_URL, PORT: "38273" });
+    const server = await run(deps);
+    if (server === null) throw new Error("expected a server");
+    servers.push(server);
+    await vi.waitFor(() => expect(server.listening).toBe(true));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/readyz`;
+    expect((await fetch(url)).status).toBe(200);
+    database.ping.mockRejectedValueOnce(new Error("db down"));
+    expect((await fetch(url)).status).toBe(503);
+  });
+
+  it("drains on SIGTERM: not ready, closes the pool, then exits 0", async () => {
+    const { deps, database, handlers, lines } = makeDeps({ DATABASE_URL, PORT: "38274" });
+    deps.exit = vi.fn((code: number): never => {
+      exitCodes.push(code);
+      return undefined as never;
+    });
+    const server = await run(deps);
+    if (server === null) throw new Error("expected a server");
+    await vi.waitFor(() => expect(server.listening).toBe(true));
+    handlers.get("SIGTERM")?.();
+    await vi.waitFor(() => expect(exitCodes).toContain(0));
+    expect(database.close).toHaveBeenCalledTimes(1);
+    expect(server.listening).toBe(false);
+    expect(lines.some((line) => line.includes("SIGTERM received, draining"))).toBe(true);
+  });
+
+  it("also drains on SIGINT", async () => {
+    const { deps, handlers } = makeDeps({ DATABASE_URL, PORT: "38275" });
+    deps.exit = vi.fn((code: number): never => {
+      exitCodes.push(code);
+      return undefined as never;
+    });
+    const server = await run(deps);
+    if (server === null) throw new Error("expected a server");
+    await vi.waitFor(() => expect(server.listening).toBe(true));
+    exitCodes.length = 0;
+    handlers.get("SIGINT")?.();
+    await vi.waitFor(() => expect(exitCodes).toContain(0));
+  });
+
+  it("does not start when the database cannot be reached", async () => {
+    const { deps } = makeDeps({ DATABASE_URL, PORT: "38276" });
+    deps.connect = vi.fn(async () => {
+      throw new Error("connection refused");
+    });
+    await expect(run(deps)).rejects.toThrow("connection refused");
   });
 });
 

@@ -13,6 +13,8 @@ export const DEFAULT_MAX_BODY_BYTES = 100_000;
 export interface ServerDeps {
   readonly graphql: RequestListener;
   readonly maxBodyBytes?: number;
+  /** Readiness probe. Not ready while the database is down or the process is draining. */
+  readonly isReady?: () => Promise<boolean>;
 }
 
 function pathOf(url: string | undefined): string {
@@ -45,6 +47,17 @@ function limitBody(req: IncomingMessage, res: ServerResponse, max: number): bool
   return true;
 }
 
+const READY_PATH = "/readyz";
+
+async function respondReady(
+  isReady: (() => Promise<boolean>) | undefined,
+  res: ServerResponse,
+): Promise<void> {
+  const ready = isReady === undefined ? true : await isReady().catch(() => false);
+  res.writeHead(ready ? 200 : 503, { "content-type": "application/json" });
+  res.end(JSON.stringify({ status: ready ? "ready" : "not_ready" }));
+}
+
 /** Adapts the pure router to node:http. Binds to all interfaces so a container port mapping works. */
 export function createHttpServer(deps: ServerDeps): Server {
   const maxBodyBytes = deps.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
@@ -52,6 +65,9 @@ export function createHttpServer(deps: ServerDeps): Server {
     if (pathOf(req.url) === GRAPHQL_PATH) {
       if (!limitBody(req, res, maxBodyBytes)) return;
       return deps.graphql(req, res);
+    }
+    if (pathOf(req.url) === READY_PATH && req.method === "GET") {
+      return void respondReady(deps.isReady, res);
     }
     const { status, body } = routeRequest(req.method, req.url);
     res.writeHead(status, { "content-type": "application/json" });

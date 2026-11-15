@@ -1,3 +1,4 @@
+import { connectDatabase } from "../infra/db/connection";
 import { migrateDatabase } from "../infra/db/migrate";
 import { run } from "./run";
 
@@ -7,4 +8,8 @@ await run({
   writeError: (message) => process.stderr.write(`${message}\n`),
   exit: (code) => process.exit(code),
   migrate: migrateDatabase,
+  connect: connectDatabase,
+  onSignal: (signal, handler) => {
+    process.once(signal, handler);
+  },
 });

@@ -111,3 +111,38 @@ describe("body size limit", () => {
     expect(DEFAULT_MAX_BODY_BYTES).toBe(100_000);
   });
 });
+
+describe("readiness", () => {
+  async function listenReady(isReady?: () => Promise<boolean>): Promise<string> {
+    const server = createHttpServer({ graphql, ...(isReady === undefined ? {} : { isReady }) });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return `http://127.0.0.1:${(server.address() as AddressInfo).port}/readyz`;
+  }
+
+  it("is ready when no probe is configured", async () => {
+    const response = await fetch(await listenReady());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "ready" });
+  });
+
+  it("is ready when the probe says so", async () => {
+    expect((await fetch(await listenReady(async () => true))).status).toBe(200);
+  });
+
+  it("is not ready when the probe says no, or throws", async () => {
+    expect((await fetch(await listenReady(async () => false))).status).toBe(503);
+    const failing = await fetch(
+      await listenReady(async () => {
+        throw new Error("db down");
+      }),
+    );
+    expect(failing.status).toBe(503);
+    expect(await failing.json()).toEqual({ status: "not_ready" });
+  });
+
+  it("only answers GET", async () => {
+    const response = await fetch(await listenReady(), { method: "POST" });
+    expect(response.status).toBe(404);
+  });
+});
