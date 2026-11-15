@@ -1,7 +1,7 @@
-import type { RequestListener } from "node:http";
+import { type RequestListener, request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createHttpServer } from "./server";
+import { createHttpServer, DEFAULT_MAX_BODY_BYTES } from "./server";
 
 const servers: ReturnType<typeof createHttpServer>[] = [];
 
@@ -56,5 +56,58 @@ describe("createHttpServer", () => {
       } as never,
     );
     expect(status).toBe(404);
+  });
+});
+
+describe("body size limit", () => {
+  async function listenWithEcho(maxBodyBytes: number): Promise<{ url: string; port: number }> {
+    const echo: RequestListener = (req, res) => {
+      let size = 0;
+      req.on("data", (chunk: Buffer) => {
+        size += chunk.length;
+      });
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end(String(size));
+      });
+    };
+    const server = createHttpServer({ graphql: echo, maxBodyBytes });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+    return { url: `http://127.0.0.1:${port}/graphql`, port };
+  }
+
+  it("passes a body within the limit", async () => {
+    const { url } = await listenWithEcho(100);
+    const response = await fetch(url, { method: "POST", body: "x".repeat(100) });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("100");
+  });
+
+  it("answers 413 when the declared length is over the limit", async () => {
+    const { url } = await listenWithEcho(100);
+    const response = await fetch(url, { method: "POST", body: "x".repeat(101) });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "payload_too_large" });
+  });
+
+  it("answers 413 to a chunked body that grows past the limit", async () => {
+    const { port } = await listenWithEcho(100);
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request({ port, host: "127.0.0.1", path: "/graphql", method: "POST" }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      });
+      req.on("error", reject);
+      req.write("x".repeat(60));
+      req.write("x".repeat(60));
+      req.end();
+    });
+    expect(status).toBe(413);
+  });
+
+  it("uses the default limit when none is given", () => {
+    expect(DEFAULT_MAX_BODY_BYTES).toBe(100_000);
   });
 });

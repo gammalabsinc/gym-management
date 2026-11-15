@@ -4,12 +4,13 @@ import { makeGreetingResolver } from "../api/greeting";
 import { makeRequestContextBuilder } from "../api/request-context";
 import type { Config } from "../app/config";
 import { makeGreet } from "../app/greet";
+import { makeRateLimiter } from "../app/rate-limit";
 import { systemClock } from "../infra/clock";
 import { uuidGenerator } from "../infra/ids";
 import { makeLogger } from "../infra/logger";
 
 export interface ComposeDeps {
-  readonly config: Pick<Config, "logLevel">;
+  readonly config: Pick<Config, "logLevel" | "nodeEnv">;
   /** Where finished log lines go. The server entry point passes stdout. */
   readonly write: (line: string) => void;
 }
@@ -27,6 +28,16 @@ export function composeApp(deps: ComposeDeps) {
     logger,
     greeting: makeGreetingResolver(greet),
     requestContext,
-    graphql: makeGraphqlHandler({ buildContext }),
+    graphql: makeGraphqlHandler({
+      buildContext,
+      production: deps.config.nodeEnv === "production",
+      rateLimits: {
+        signIn: makeRateLimiter({ clock: systemClock, policy: { limit: 10, windowMs: 60_000 } }),
+        recordScan: makeRateLimiter({
+          clock: systemClock,
+          policy: { limit: 120, windowMs: 60_000 },
+        }),
+      },
+    }),
   };
 }
