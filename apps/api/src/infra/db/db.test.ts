@@ -108,10 +108,11 @@ describe("provisionRoles", () => {
 
 describe("migrateDatabase", () => {
   it("runs forward on an empty database and then has nothing left to do", async () => {
-    expect(await migrateDatabase(migratorUrl())).toEqual(["GrantAppPrivileges1700000000000"]);
+    const names = MIGRATIONS.map((migration) => migration.name);
+    expect(await migrateDatabase(migratorUrl())).toEqual(names);
     expect(await migrateDatabase(migratorUrl())).toEqual([]);
-    const { rows } = await db.admin.query("SELECT name FROM migrations");
-    expect(rows).toEqual([{ name: "GrantAppPrivileges1700000000000" }]);
+    const { rows } = await db.admin.query("SELECT name FROM migrations ORDER BY id");
+    expect(rows).toEqual(names.map((name) => ({ name })));
   });
 
   it("rejects when the migrator cannot connect, and ends the connection", async () => {
