@@ -61,3 +61,19 @@ export interface AuditEvent {
 export interface AuditLog {
   record(event: AuditEvent): Promise<void>;
 }
+
+export interface GoogleUser {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly email: string;
+  readonly name: string | null;
+}
+
+/** Looks a Google account up by its subject id and keeps the user row in step with it. */
+export interface GoogleUserDirectory {
+  /** Matches on the subject, never on the email. A changed email updates the same user. */
+  upsertBySubject(
+    tenantId: string,
+    identity: { readonly subject: string; readonly email: string; readonly name: string | null },
+  ): Promise<GoogleUser>;
+}
