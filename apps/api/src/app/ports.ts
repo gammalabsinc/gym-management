@@ -77,3 +77,36 @@ export interface GoogleUserDirectory {
     identity: { readonly subject: string; readonly email: string; readonly name: string | null },
   ): Promise<GoogleUser>;
 }
+
+/** A session row as the store hands it back. The token hash never leaves the store. */
+export interface StoredSession {
+  readonly id: string;
+  readonly subject: string;
+  readonly expiresAt: Date;
+  readonly revokedAt: Date | null;
+}
+
+export interface NewSession {
+  readonly id: string;
+  readonly tokenHash: string;
+  readonly subject: string;
+  readonly createdAt: Date;
+  readonly expiresAt: Date;
+}
+
+/** Sessions are keyed by the hash of their token, so a copy of the table holds no usable token. */
+export interface SessionStore {
+  insert(session: NewSession): Promise<void>;
+  findByTokenHash(tokenHash: string): Promise<StoredSession | null>;
+  /** Marks the session revoked. Revoking an unknown or already revoked session changes nothing. */
+  revokeByTokenHash(tokenHash: string, at: Date): Promise<void>;
+  /** Revokes every live session of one person. Returns how many were revoked. */
+  revokeAllForSubject(subject: string, at: Date): Promise<number>;
+}
+
+/** Makes session tokens and turns a presented token into the value the store is keyed by. */
+export interface SessionTokens {
+  /** A fresh unguessable token, and the hash to store for it. */
+  generate(): { readonly token: string; readonly tokenHash: string };
+  hash(token: string): string;
+}

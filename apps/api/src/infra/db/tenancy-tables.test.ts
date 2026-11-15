@@ -161,6 +161,8 @@ describe("user_roles", () => {
 });
 
 describe("every tenant table", () => {
+  // sessions is the one table without a tenant_id on purpose: a session belongs to a Google account
+  // that can hold roles in several gyms, and the token is looked up before a gym is chosen.
   it("has tenant_id as a not null uuid, and its unique indexes lead with it", async () => {
     const { rows } = await db.admin.query(`
       SELECT t.table_name, c.data_type, c.is_nullable
@@ -168,7 +170,7 @@ describe("every tenant table", () => {
       LEFT JOIN information_schema.columns c
         ON c.table_schema = t.table_schema AND c.table_name = t.table_name AND c.column_name = 'tenant_id'
       WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
-        AND t.table_name NOT IN ('tenants', 'migrations')
+        AND t.table_name NOT IN ('tenants', 'migrations', 'sessions')
       ORDER BY t.table_name`);
     expect(rows).toEqual([
       { table_name: "audit_events", data_type: "uuid", is_nullable: "NO" },
@@ -192,7 +194,8 @@ describe("the migration", () => {
     const source = makeDataSource(db.urlFor(MIGRATOR_ROLE, PASSWORDS.migratorPassword));
     await source.initialize();
     try {
-      // Newest first: row level security, the audit trail, then the tenancy tables they point at.
+      // Newest first: sessions, row level security, the audit trail, then the tenancy tables they point at.
+      await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
