@@ -12,11 +12,13 @@
     "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.include='src/**/*.{ts,tsx}' --coverage.exclude='**/*.test.ts' --coverage.reporter=text-summary --coverage.reporter=lcov --coverage.thresholds.lines=90 --coverage.thresholds.branches=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90"
   },
   "dependencies": {
+    "@gym/graphql-schema": "workspace:*",
     "@react-navigation/bottom-tabs": "^7.21.0",
     "@react-navigation/native": "^7.5.1",
     "expo": "^58.0.25",
     "expo-constants": "~58.0.16",
     "expo-status-bar": "~58.0.5",
+    "graphql": "^17.1.0",
     "react": "19.3.0",
     "react-native": "0.88.1",
     "react-native-safe-area-context": "~5.11.1",
