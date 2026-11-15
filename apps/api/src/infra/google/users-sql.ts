@@ -1,8 +1,7 @@
 import type { GoogleUser, GoogleUserDirectory } from "../../app/ports";
+import type { SqlExecutor } from "../db/sql-executor";
 
-export interface SqlExecutor {
-  query(sql: string, params: unknown[]): Promise<unknown>;
-}
+export type { SqlExecutor };
 
 interface UserRow {
   id: string;
