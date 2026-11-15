@@ -20,3 +20,23 @@ export function isCalendarDate(text: string): boolean {
   const day = Number(match[3]);
   return year >= 1 && day >= 1 && day <= daysInMonth(year, month);
 }
+
+/** Days since 0000-03-01 for a real calendar date, so two dates subtract to a day count. */
+function dayNumber(text: string): number {
+  const year = Number(text.slice(0, 4));
+  const month = Number(text.slice(5, 7));
+  const day = Number(text.slice(8, 10));
+  const shiftedYear = month <= 2 ? year - 1 : year;
+  const era = Math.floor(shiftedYear / 400);
+  const yearOfEra = shiftedYear - era * 400;
+  const monthFromMarch = (month + 9) % 12;
+  const dayOfYear = Math.floor((153 * monthFromMarch + 2) / 5) + day - 1;
+  const dayOfEra =
+    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  return era * 146097 + dayOfEra;
+}
+
+/** Whole days from `from` to `to`, negative when `to` is earlier. Both must pass isCalendarDate. */
+export function daysBetween(from: string, to: string): number {
+  return dayNumber(to) - dayNumber(from);
+}
