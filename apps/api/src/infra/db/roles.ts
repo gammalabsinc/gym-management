@@ -19,6 +19,9 @@ function createRoleIfMissing(role: string): string {
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN
     CREATE ROLE ${role} ${NO_POWERS};
   END IF;
+EXCEPTION WHEN unique_violation THEN
+  -- Another session created the role between the check and the create, which is the goal.
+  NULL;
 END $$`;
 }
 

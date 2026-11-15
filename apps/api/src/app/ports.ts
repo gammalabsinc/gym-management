@@ -34,3 +34,30 @@ export interface Logger {
  * the app layer never looks inside it.
  */
 export type WithTenantTx<Tx> = <T>(tenantId: string, fn: (tx: Tx) => Promise<T>) => Promise<T>;
+
+/** The row before or after a change, as plain data. */
+export type AuditSnapshot = Readonly<Record<string, unknown>>;
+
+/** What a use case reports about one change. The tenant comes from the transaction, not from here. */
+export interface AuditEvent {
+  /** Null for system jobs. */
+  readonly actorUserId: string | null;
+  /** A key such as payment.recorded or role.assigned. */
+  readonly action: string;
+  readonly entityType: string;
+  readonly entityId: string;
+  /** Null where there was no earlier row. */
+  readonly before: AuditSnapshot | null;
+  /** Null where nothing is left afterwards. */
+  readonly after: AuditSnapshot | null;
+  /** Ties the event to one API request. */
+  readonly requestId: string;
+}
+
+/**
+ * Called inside the use case transaction, so the event commits or rolls back with the change it
+ * describes. An invalid event is a bug and throws, which rolls the whole change back.
+ */
+export interface AuditLog {
+  record(event: AuditEvent): Promise<void>;
+}

@@ -171,14 +171,15 @@ describe("every tenant table", () => {
         AND t.table_name NOT IN ('tenants', 'migrations')
       ORDER BY t.table_name`);
     expect(rows).toEqual([
+      { table_name: "audit_events", data_type: "uuid", is_nullable: "NO" },
       { table_name: "user_roles", data_type: "uuid", is_nullable: "NO" },
       { table_name: "users", data_type: "uuid", is_nullable: "NO" },
     ]);
     const indexes = await db.admin.query(`
       SELECT indexdef FROM pg_indexes
-      WHERE schemaname = 'public' AND tablename IN ('users', 'user_roles') AND indexdef LIKE '%UNIQUE%'`);
+      WHERE schemaname = 'public' AND tablename IN ('users', 'user_roles', 'audit_events') AND indexdef LIKE '%UNIQUE%'`);
     const defs = (indexes.rows as { indexdef: string }[]).map((row) => row.indexdef);
-    expect(defs).toHaveLength(5);
+    expect(defs).toHaveLength(6);
     for (const def of defs) {
       if (def.includes("users_pkey")) continue;
       expect(def).toMatch(/\(tenant_id, /);
@@ -191,6 +192,8 @@ describe("the migration", () => {
     const source = makeDataSource(db.urlFor(MIGRATOR_ROLE, PASSWORDS.migratorPassword));
     await source.initialize();
     try {
+      // Newest first: the audit trail, then the tenancy tables it points at.
+      await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       const gone = await db.admin.query(
         "SELECT to_regclass('public.users') AS users, to_regclass('public.tenants') AS tenants",
