@@ -13,6 +13,12 @@ export interface TestDatabase {
   drop(): Promise<void>;
 }
 
+/**
+ * Roles belong to the whole cluster, not to one database, so two test files that set a password on
+ * gym_app at the same time break each other. Each file holds this lock for its whole life.
+ */
+const ROLE_LOCK_KEY = 7_340_001;
+
 export function adminUrl(): string {
   const url = process.env.DATABASE_URL;
   if (url === undefined || url === "") {
@@ -26,6 +32,7 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   const name = `gym_d1_${randomUUID().replaceAll("-", "")}`;
   const maintenance = new pg.Client({ connectionString: base.toString() });
   await maintenance.connect();
+  await maintenance.query("SELECT pg_advisory_lock($1)", [ROLE_LOCK_KEY]);
   await maintenance.query(`CREATE DATABASE ${name}`);
 
   const withRole = (role: string, password: string): string => {
@@ -52,6 +59,7 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     async drop() {
       await admin.end();
       await maintenance.query(`DROP DATABASE ${name} WITH (FORCE)`);
+      await maintenance.query("SELECT pg_advisory_unlock($1)", [ROLE_LOCK_KEY]);
       await maintenance.end();
     },
   };
