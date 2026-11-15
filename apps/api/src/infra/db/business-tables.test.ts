@@ -854,6 +854,8 @@ describe("the migration", () => {
     const source = makeDataSource(db.urlFor(MIGRATOR_ROLE, PASSWORDS.migratorPassword));
     await source.initialize();
     try {
+      // Newest first: the account claim policies, then the business tables.
+      await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       const gone = await admin.query(
         "SELECT to_regclass('public.members') AS members, to_regproc('guard_money_row') AS fn",

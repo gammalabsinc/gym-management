@@ -62,20 +62,27 @@ export interface AuditLog {
   record(event: AuditEvent): Promise<void>;
 }
 
-export interface GoogleUser {
-  readonly id: string;
+/** One gym a Google account has a row in. Names and roles are read where they are needed. */
+export interface GymAccount {
+  readonly userId: string;
   readonly tenantId: string;
-  readonly email: string;
-  readonly name: string | null;
 }
 
-/** Looks a Google account up by its subject id and keeps the user row in step with it. */
-export interface GoogleUserDirectory {
-  /** Matches on the subject, never on the email. A changed email updates the same user. */
-  upsertBySubject(
-    tenantId: string,
-    identity: { readonly subject: string; readonly email: string; readonly name: string | null },
-  ): Promise<GoogleUser>;
+/**
+ * Members and staff are added by Google email before they ever sign in, so a sign in never
+ * creates a user. It links the Google subject to the rows that were waiting for that email.
+ */
+export interface AccountDirectory {
+  /**
+   * Links the subject to every unlinked user row with this email, in every gym, then returns
+   * all rows the subject now holds. A row already linked to a subject is never taken over, and
+   * an email with no rows returns an empty list. After a row is linked, the subject is the
+   * identity and the email on the row is only a label.
+   */
+  claim(identity: {
+    readonly subject: string;
+    readonly email: string;
+  }): Promise<readonly GymAccount[]>;
 }
 
 /** A session row as the store hands it back. The token hash never leaves the store. */
