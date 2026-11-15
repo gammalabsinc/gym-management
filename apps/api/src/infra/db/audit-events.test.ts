@@ -6,7 +6,7 @@ import { makeAuditLog } from "./audit-log";
 import { dataSourceOptions } from "./data-source";
 import { migrateDatabase } from "./migrate";
 import { APP_ROLE, MIGRATOR_ROLE, provisionRoles } from "./roles";
-import { makeWithTenantTx, type TenantTx } from "./tenant-tx";
+import { makeWithTenantTx, TENANT_SETTING, type TenantTx } from "./tenant-tx";
 import { createTestDatabase, type TestDatabase } from "./test-database";
 
 const PASSWORDS = { migratorPassword: "migrator-pw", appPassword: "app-pw" };
@@ -43,8 +43,9 @@ async function codeOf(attempt: Promise<unknown>): Promise<string | undefined> {
   return undefined;
 }
 
+/** Fixtures go in as the superuser, which row level security does not apply to. */
 async function tenant(subdomain: string): Promise<string> {
-  const { rows } = await app.query(
+  const { rows } = await db.admin.query(
     "INSERT INTO tenants (name, subdomain, timezone, currency) VALUES ($1, $2, 'America/Toronto', 'CAD') RETURNING id",
     [`Gym ${subdomain}`, subdomain],
   );
@@ -52,7 +53,7 @@ async function tenant(subdomain: string): Promise<string> {
 }
 
 async function user(tenantId: string, email: string): Promise<string> {
-  const { rows } = await app.query(
+  const { rows } = await db.admin.query(
     "INSERT INTO users (tenant_id, email) VALUES ($1, $2) RETURNING id",
     [tenantId, email],
   );
@@ -83,8 +84,21 @@ function record(tenantId: string, audit: AuditEvent): Promise<void> {
   return makeWithTenantTx(source)(tenantId, (tx) => makeAuditLog(tx, { clock, ids }).record(audit));
 }
 
+/** Runs one statement as the app role with the tenant set, in its own transaction. */
+async function asTenant(tenantId: string, sql: string, params: unknown[] = []): Promise<void> {
+  await app.query("BEGIN");
+  try {
+    await app.query("SELECT set_config($1, $2, true)", [TENANT_SETTING, tenantId]);
+    await app.query(sql, params);
+    await app.query("COMMIT");
+  } catch (error) {
+    await app.query("ROLLBACK");
+    throw error;
+  }
+}
+
 async function rowsOf(tenantId: string) {
-  const { rows } = await app.query(
+  const { rows } = await db.admin.query(
     "SELECT * FROM audit_events WHERE tenant_id = $1 ORDER BY occurred_at, id",
     [tenantId],
   );
@@ -94,7 +108,8 @@ async function rowsOf(tenantId: string) {
 describe("audit_events at the database", () => {
   it("accepts an insert and a select from the app role", async () => {
     const id = await tenant("db-insert");
-    await app.query(
+    await asTenant(
+      id,
       `INSERT INTO audit_events (tenant_id, id, occurred_at, action, entity_type, entity_id, request_id)
        VALUES ($1, gen_random_uuid(), now(), 'member.updated', 'member', gen_random_uuid(), 'req-db')`,
       [id],
@@ -106,12 +121,12 @@ describe("audit_events at the database", () => {
     const id = await tenant("db-append-only");
     await record(id, event());
     const attempts = [
-      app.query("UPDATE audit_events SET action = 'tampered' WHERE tenant_id = $1", [id]),
-      app.query("DELETE FROM audit_events WHERE tenant_id = $1", [id]),
-      app.query("TRUNCATE audit_events"),
+      () => asTenant(id, "UPDATE audit_events SET action = 'tampered' WHERE tenant_id = $1", [id]),
+      () => asTenant(id, "DELETE FROM audit_events WHERE tenant_id = $1", [id]),
+      () => asTenant(id, "TRUNCATE audit_events"),
     ];
     for (const attempt of attempts) {
-      expect(await codeOf(attempt)).toBe(INSUFFICIENT_PRIVILEGE);
+      expect(await codeOf(attempt())).toBe(INSUFFICIENT_PRIVILEGE);
     }
     expect((await rowsOf(id))[0]?.action).toBe("payment.recorded");
   });
@@ -128,7 +143,8 @@ describe("audit_events at the database", () => {
   it("requires a tenant, a non empty action, entity type and request id", async () => {
     const id = await tenant("db-checks");
     const insert = (tenantId: string, action: string, entityType: string, requestId: string) =>
-      app.query(
+      asTenant(
+        tenantId,
         `INSERT INTO audit_events (tenant_id, id, occurred_at, action, entity_type, entity_id, request_id)
          VALUES ($1, gen_random_uuid(), now(), $2, $3, gen_random_uuid(), $4)`,
         [tenantId, action, entityType, requestId],
@@ -173,7 +189,7 @@ describe("makeAuditLog", () => {
   it("stores a missing snapshot and a system actor as SQL null, not JSON null", async () => {
     const id = await tenant("log-nulls");
     await record(id, event({ before: null, after: null }));
-    const { rows } = await app.query(
+    const { rows } = await db.admin.query(
       "SELECT before IS NULL AS no_before, after IS NULL AS no_after, actor_user_id IS NULL AS system FROM audit_events WHERE tenant_id = $1",
       [id],
     );

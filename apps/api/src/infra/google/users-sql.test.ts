@@ -1,7 +1,9 @@
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { GoogleUserDirectory } from "../../app/ports";
 import { migrateDatabase } from "../db/migrate";
 import { APP_ROLE, MIGRATOR_ROLE, provisionRoles } from "../db/roles";
+import { TENANT_SETTING } from "../db/tenant-tx";
 import { createTestDatabase, type TestDatabase } from "../db/test-database";
 import { makeGoogleUserDirectory } from "./users-sql";
 
@@ -34,8 +36,23 @@ afterAll(async () => {
   await db.drop();
 });
 
-const directory = () =>
-  makeGoogleUserDirectory({ query: async (sql, params) => (await app.query(sql, params)).rows });
+/** Each upsert runs in its own transaction with the tenant set, the way withTenantTx does it. */
+const directory = (): GoogleUserDirectory => ({
+  async upsertBySubject(tenantId, identity) {
+    await app.query("BEGIN");
+    try {
+      await app.query("SELECT set_config($1, $2, true)", [TENANT_SETTING, tenantId]);
+      const user = await makeGoogleUserDirectory({
+        query: async (sql, params) => (await app.query(sql, params)).rows,
+      }).upsertBySubject(tenantId, identity);
+      await app.query("COMMIT");
+      return user;
+    } catch (error) {
+      await app.query("ROLLBACK");
+      throw error;
+    }
+  },
+});
 
 describe("makeGoogleUserDirectory", () => {
   it("creates a google user the first time a subject signs in", async () => {
@@ -45,7 +62,7 @@ describe("makeGoogleUserDirectory", () => {
       name: "New Member",
     });
     expect(user).toMatchObject({ tenantId: tenantA, email: "new@example.com", name: "New Member" });
-    const { rows } = await app.query(
+    const { rows } = await db.admin.query(
       "SELECT auth_provider, auth_subject FROM users WHERE id = $1",
       [user.id],
     );
@@ -65,7 +82,7 @@ describe("makeGoogleUserDirectory", () => {
     });
     expect(second.id).toBe(first.id);
     expect(second).toMatchObject({ email: "after@example.com", name: "Moved" });
-    const { rows } = await app.query(
+    const { rows } = await db.admin.query(
       "SELECT count(*)::int AS n FROM users WHERE tenant_id = $1 AND auth_subject = 'sub-moved'",
       [tenantA],
     );

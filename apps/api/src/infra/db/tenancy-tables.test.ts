@@ -2,7 +2,7 @@ import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { makeDataSource } from "./data-source";
 import { migrateDatabase } from "./migrate";
-import { APP_ROLE, MIGRATOR_ROLE, provisionRoles } from "./roles";
+import { MIGRATOR_ROLE, provisionRoles } from "./roles";
 import { createTestDatabase, type TestDatabase } from "./test-database";
 
 const PASSWORDS = { migratorPassword: "migrator-pw", appPassword: "app-pw" };
@@ -18,11 +18,11 @@ beforeAll(async () => {
   db = await createTestDatabase();
   await provisionRoles(db.admin, PASSWORDS);
   await migrateDatabase(db.urlFor(MIGRATOR_ROLE, PASSWORDS.migratorPassword));
-  app = await db.connect(APP_ROLE, PASSWORDS.appPassword);
+  // The superuser sets up fixtures across tenants. Row level security is tested in rls.test.ts.
+  app = db.admin;
 });
 
 afterAll(async () => {
-  await app.end();
   await db.drop();
 });
 
@@ -192,7 +192,8 @@ describe("the migration", () => {
     const source = makeDataSource(db.urlFor(MIGRATOR_ROLE, PASSWORDS.migratorPassword));
     await source.initialize();
     try {
-      // Newest first: the audit trail, then the tenancy tables it points at.
+      // Newest first: row level security, the audit trail, then the tenancy tables they point at.
+      await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       const gone = await db.admin.query(
