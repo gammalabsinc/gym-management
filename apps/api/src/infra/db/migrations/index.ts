@@ -4,6 +4,7 @@ import { AuditEvents1700000002000 } from "./1700000002000-audit-events";
 import { RowLevelSecurity1700000003000 } from "./1700000003000-row-level-security";
 import { Sessions1700000004000 } from "./1700000004000-sessions";
 import { BusinessTables1700000005000 } from "./1700000005000-business-tables";
+import { AccountClaimPolicies1700000006000 } from "./1700000006000-account-claim-policies";
 
 /** Listed in run order. Classes, not a glob, so the bundled server finds them. */
 export const MIGRATIONS = [
@@ -13,4 +14,5 @@ export const MIGRATIONS = [
   RowLevelSecurity1700000003000,
   Sessions1700000004000,
   BusinessTables1700000005000,
+  AccountClaimPolicies1700000006000,
 ];

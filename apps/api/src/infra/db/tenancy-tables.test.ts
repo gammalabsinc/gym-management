@@ -194,8 +194,9 @@ describe("the migration", () => {
     const source = makeDataSource(db.urlFor(MIGRATOR_ROLE, PASSWORDS.migratorPassword));
     await source.initialize();
     try {
-      // Newest first: the business tables, sessions, row level security, the audit trail, then the
-      // tenancy tables they point at.
+      // Newest first: account claim policies, the business tables, sessions, row level security, the
+      // audit trail, then the tenancy tables they point at.
+      await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
