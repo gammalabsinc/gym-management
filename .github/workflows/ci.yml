@@ -71,3 +71,32 @@ jobs:
           python3 -m diff_cover.diff_cover_tool coverage/lcov.info \
             --compare-branch="origin/${{ github.base_ref }}" \
             --fail-under=90
+      # Main must always be deployable, so the image that Railway builds is built here too and then
+      # run the way the deploy runs it: provision roles, migrate (twice, the second run must change
+      # nothing), then boot and wait for readiness. Any failing step fails the required check.
+      - name: Build the API image
+        run: docker build --tag gym-api:ci .
+      - name: Create a fresh database for the image check
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE gym_image"
+      - name: Provision, migrate and boot the built image
+        env:
+          ADMIN_URL: postgres://postgres:postgres@localhost:5432/gym_image
+          MIGRATOR_URL: postgres://gym_migrator:ci-migrator-password-1@localhost:5432/gym_image
+          APP_URL: postgres://gym_app:ci-app-password-123456@localhost:5432/gym_image
+        run: |
+          set -euo pipefail
+          run_image() { docker run --rm --network host "$@" gym-api:ci; }
+          run_image -e MODE=provision -e DATABASE_URL="$ADMIN_URL" \
+            -e MIGRATOR_ROLE_PASSWORD=ci-migrator-password-1 -e APP_ROLE_PASSWORD=ci-app-password-123456
+          run_image -e MODE=migrate -e DATABASE_URL="$APP_URL" -e MIGRATOR_DATABASE_URL="$MIGRATOR_URL"
+          second="$(run_image -e MODE=migrate -e DATABASE_URL="$APP_URL" -e MIGRATOR_DATABASE_URL="$MIGRATOR_URL")"
+          echo "$second"
+          grep -q '"ran":\[\]' <<<"$second" || { echo "a second migrate run changed the database" >&2; exit 1; }
+          docker run --detach --name gym-api --network host -e PORT=3000 -e DATABASE_URL="$APP_URL" gym-api:ci
+          curl --silent --show-error --fail --retry 15 --retry-delay 2 --retry-connrefused \
+            http://localhost:3000/readyz
+      - name: API container logs
+        if: failure()
+        run: docker logs gym-api || true
