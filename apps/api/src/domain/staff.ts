@@ -1,6 +1,7 @@
 import { type ValidationError, validationError } from "./errors";
 import type { Role } from "./permissions";
 import { ok, type Result } from "./result";
+import { parseUuid } from "./uuid";
 
 /** The roles that role management hands out. Members are added through the member use cases. */
 export const STAFF_ROLES = ["owner", "staff"] as const satisfies readonly Role[];
@@ -10,7 +11,6 @@ export const MAX_EMAIL_LENGTH = 254;
 export const MAX_NAME_LENGTH = 120;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isStaffRole(role: string): role is StaffRole {
   return (STAFF_ROLES as readonly string[]).includes(role);
@@ -27,10 +27,7 @@ export function wouldRemoveLastOwner(ownerIds: readonly string[], userId: string
 }
 
 export function parseUserId(raw: string): Result<string, ValidationError> {
-  const id = raw.trim();
-  return UUID_PATTERN.test(id)
-    ? ok(id.toLowerCase())
-    : validationError("Invalid user id", [{ path: ["userId"], message: "Invalid id" }]);
+  return parseUuid(raw, "userId");
 }
 
 export interface InviteInput {

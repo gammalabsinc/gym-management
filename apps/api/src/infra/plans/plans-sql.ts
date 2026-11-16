@@ -44,6 +44,22 @@ export function makePlanStore(executor: SqlExecutor, tenantId: string): PlanStor
       return plan ?? null;
     },
 
+    async findForUpdate(id) {
+      const [plan] = await rows(
+        `SELECT ${COLUMNS} FROM plans WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, id],
+      );
+      return plan ?? null;
+    },
+
+    async update(id, fields) {
+      await executor.query(
+        `UPDATE plans SET name = $3, admission_fee = $4, monthly_fee = $5, updated_at = now()
+          WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, id, fields.name, fields.admissionFee, fields.monthlyFee],
+      );
+    },
+
     async insertIfAbsent(plan) {
       const [inserted] = await rows(
         `INSERT INTO plans (tenant_id, key, name, admission_fee, monthly_fee)

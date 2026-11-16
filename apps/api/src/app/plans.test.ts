@@ -17,6 +17,10 @@ function world(initial: Plan[] = []) {
     async findByKey(key) {
       return hooks.hideAfterConflict ? null : (plans.find((plan) => plan.key === key) ?? null);
     },
+    async findForUpdate(id) {
+      return plans.find((plan) => plan.id === id) ?? null;
+    },
+    async update() {},
     async insertIfAbsent(plan) {
       if (plans.some((existing) => existing.key === plan.key)) return null;
       const created: Plan = { ...plan, id: `plan-${plans.length + 1}`, isActive: true };
