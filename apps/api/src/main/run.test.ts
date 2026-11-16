@@ -14,6 +14,7 @@ function makeDeps(env: Record<string, string | undefined>) {
     throw new ExitSignal(`exit ${code}`);
   });
   const migrate = vi.fn(async (_url: string): Promise<readonly string[]> => ["First1", "Second2"]);
+  const provision = vi.fn(async (_url: string, _passwords: unknown): Promise<void> => {});
   const database = { ping: vi.fn(async () => {}), close: vi.fn(async () => {}) };
   const connect = vi.fn(async (_url: string) => database);
   const handlers = new Map<string, () => void>();
@@ -27,6 +28,7 @@ function makeDeps(env: Record<string, string | undefined>) {
       writeError,
       exit,
       migrate,
+      provision,
       connect,
       onSignal,
     },
@@ -37,6 +39,7 @@ function makeDeps(env: Record<string, string | undefined>) {
     writeError,
     exit,
     migrate,
+    provision,
   };
 }
 
@@ -156,6 +159,53 @@ describe("run in migrate mode", () => {
     });
     migrate.mockRejectedValueOnce(new Error("migration failed"));
     await expect(run(deps)).rejects.toThrow("migration failed");
+  });
+});
+
+describe("run in provision mode", () => {
+  const passwordEnv = {
+    MIGRATOR_ROLE_PASSWORD: "migrator-password-0123",
+    APP_ROLE_PASSWORD: "app-password-01234567",
+  };
+
+  it("sets the role passwords through the administrator url and reports it", async () => {
+    const { deps, lines, provision, connect } = makeDeps({
+      DATABASE_URL,
+      MODE: "provision",
+      ...passwordEnv,
+    });
+    expect(await run(deps)).toBeNull();
+    expect(provision).toHaveBeenCalledWith(DATABASE_URL, {
+      migratorPassword: passwordEnv.MIGRATOR_ROLE_PASSWORD,
+      appPassword: passwordEnv.APP_ROLE_PASSWORD,
+    });
+    expect(JSON.parse(lines[0] ?? "{}")).toEqual({ msg: "roles provisioned" });
+    expect(lines.join("")).not.toContain(passwordEnv.APP_ROLE_PASSWORD);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no passwords", {}],
+    ["only the migrator password", { MIGRATOR_ROLE_PASSWORD: passwordEnv.MIGRATOR_ROLE_PASSWORD }],
+    ["only the app password", { APP_ROLE_PASSWORD: passwordEnv.APP_ROLE_PASSWORD }],
+  ])("refuses to run with %s", async (_name, extra) => {
+    const { deps, writeError, exit, provision } = makeDeps({
+      DATABASE_URL,
+      MODE: "provision",
+      ...extra,
+    });
+    await expect(run(deps)).rejects.toThrow(ExitSignal);
+    expect(writeError).toHaveBeenCalledWith(
+      "MIGRATOR_ROLE_PASSWORD and APP_ROLE_PASSWORD are required when MODE=provision",
+    );
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it("lets a failed provision reject so the process exits non zero", async () => {
+    const { deps, provision } = makeDeps({ DATABASE_URL, MODE: "provision", ...passwordEnv });
+    provision.mockRejectedValueOnce(new Error("permission denied"));
+    await expect(run(deps)).rejects.toThrow("permission denied");
   });
 });
 

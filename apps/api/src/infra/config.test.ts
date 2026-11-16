@@ -95,6 +95,39 @@ describe("ConfigError", () => {
   });
 });
 
+describe("role passwords", () => {
+  const passwords = {
+    MIGRATOR_ROLE_PASSWORD: "migrator-password-0123",
+    APP_ROLE_PASSWORD: "app-password-01234567",
+  };
+
+  it("are left out when unset or when only one is set", () => {
+    expect(parseConfig(validEnv)).not.toHaveProperty("rolePasswords");
+    expect(
+      parseConfig({ ...validEnv, MIGRATOR_ROLE_PASSWORD: passwords.MIGRATOR_ROLE_PASSWORD }),
+    ).not.toHaveProperty("rolePasswords");
+    expect(
+      parseConfig({ ...validEnv, APP_ROLE_PASSWORD: passwords.APP_ROLE_PASSWORD }),
+    ).not.toHaveProperty("rolePasswords");
+  });
+
+  it("are read when both are set and redacted for logs", () => {
+    const config = parseConfig({ ...validEnv, MODE: "provision", ...passwords });
+    expect(config.rolePasswords).toEqual({
+      migratorPassword: passwords.MIGRATOR_ROLE_PASSWORD,
+      appPassword: passwords.APP_ROLE_PASSWORD,
+    });
+    expect(JSON.stringify(redactConfig(config))).not.toContain("password-0123");
+    expect(redactConfig(config)).toMatchObject({ rolePasswords: "[redacted]" });
+  });
+
+  it("must be at least 16 characters", () => {
+    expect(problemsOf({ ...validEnv, ...passwords, APP_ROLE_PASSWORD: "short" })).toEqual([
+      expect.stringMatching(/^APP_ROLE_PASSWORD: /),
+    ]);
+  });
+});
+
 describe("loadConfig", () => {
   it("reads process.env", () => {
     vi.stubEnv("DATABASE_URL", validEnv.DATABASE_URL);
