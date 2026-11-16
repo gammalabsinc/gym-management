@@ -4,6 +4,7 @@ import { type Config, LOG_LEVELS, MODES, NODE_ENVS } from "../app/config";
 export type Env = Readonly<Record<string, string | undefined>>;
 
 const REDACTED = "[redacted]";
+const MIN_PASSWORD_LENGTH = 16;
 
 const envSchema = z
   .object({
@@ -13,6 +14,8 @@ const envSchema = z
     LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
     DATABASE_URL: z.url(),
     MIGRATOR_DATABASE_URL: z.url().optional(),
+    MIGRATOR_ROLE_PASSWORD: z.string().min(MIN_PASSWORD_LENGTH).optional(),
+    APP_ROLE_PASSWORD: z.string().min(MIN_PASSWORD_LENGTH).optional(),
   })
   .transform(
     (env): Config => ({
@@ -24,6 +27,14 @@ const envSchema = z
       ...(env.MIGRATOR_DATABASE_URL === undefined
         ? {}
         : { migratorDatabaseUrl: env.MIGRATOR_DATABASE_URL }),
+      ...(env.MIGRATOR_ROLE_PASSWORD === undefined || env.APP_ROLE_PASSWORD === undefined
+        ? {}
+        : {
+            rolePasswords: {
+              migratorPassword: env.MIGRATOR_ROLE_PASSWORD,
+              appPassword: env.APP_ROLE_PASSWORD,
+            },
+          }),
     }),
   );
 
@@ -59,5 +70,6 @@ export function redactConfig(config: Config): Record<string, unknown> {
     ...config,
     databaseUrl: REDACTED,
     ...(config.migratorDatabaseUrl === undefined ? {} : { migratorDatabaseUrl: REDACTED }),
+    ...(config.rolePasswords === undefined ? {} : { rolePasswords: REDACTED }),
   };
 }

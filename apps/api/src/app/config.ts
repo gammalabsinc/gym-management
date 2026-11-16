@@ -1,4 +1,4 @@
-export const MODES = ["api", "worker", "migrate"] as const;
+export const MODES = ["api", "worker", "migrate", "provision"] as const;
 export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 export const NODE_ENVS = ["development", "test", "production"] as const;
 
@@ -12,4 +12,14 @@ export interface Config {
   readonly databaseUrl: string;
   /** Only the migrate mode needs it. The app role in databaseUrl cannot change the schema. */
   readonly migratorDatabaseUrl?: string;
+  /**
+   * Only the provision mode needs them. It sets these passwords on the two database roles, and
+   * databaseUrl must then be an administrator url, not the app role.
+   */
+  readonly rolePasswords?: RolePasswordsConfig;
+}
+
+export interface RolePasswordsConfig {
+  readonly migratorPassword: string;
+  readonly appPassword: string;
 }
