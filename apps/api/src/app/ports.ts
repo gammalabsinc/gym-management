@@ -1,3 +1,5 @@
+import type { Role } from "../domain/permissions";
+
 export interface Clock {
   now(): Date;
 }
@@ -116,4 +118,48 @@ export interface SessionTokens {
   /** A fresh unguessable token, and the hash to store for it. */
   generate(): { readonly token: string; readonly tokenHash: string };
   hash(token: string): string;
+}
+
+/** One user of a gym as the staff directory stores it. */
+export interface StaffRecord {
+  readonly userId: string;
+  readonly name: string | null;
+  readonly email: string;
+  /** Every role the user holds in this gym, in alphabetical order. */
+  readonly roles: readonly Role[];
+  /** Null until the person has signed in with Google. */
+  readonly authSubject: string | null;
+}
+
+/**
+ * The users and roles of one gym. It belongs to a tenant transaction, so it only ever sees that
+ * gym's rows.
+ */
+export interface StaffDirectory {
+  /** The users who hold the owner or staff role, ordered by email. */
+  list(): Promise<readonly StaffRecord[]>;
+  find(userId: string): Promise<StaffRecord | null>;
+  /** The email is lower case. */
+  findByEmail(email: string): Promise<StaffRecord | null>;
+  /**
+   * The ids of every owner. The rows stay locked until the transaction ends, so two requests
+   * that each demote a different owner cannot both pass the last owner check.
+   */
+  lockOwners(): Promise<readonly string[]>;
+  /** Returns the new user id, or null when someone added the same email in the meantime. */
+  createUser(user: {
+    readonly email: string;
+    readonly name: string | null;
+  }): Promise<string | null>;
+  /** Returns false when the user already held the role. */
+  addRole(userId: string, role: Role): Promise<boolean>;
+  /** Returns false when the user did not hold the role. */
+  removeRole(userId: string, role: Role): Promise<boolean>;
+}
+
+/** Everything one role management use case needs, all inside one tenant transaction. */
+export interface StaffUnit {
+  readonly staff: StaffDirectory;
+  readonly audit: AuditLog;
+  readonly sessions: Pick<SessionStore, "revokeAllForSubject">;
 }
