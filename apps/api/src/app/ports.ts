@@ -1,4 +1,5 @@
 import type { Role } from "../domain/permissions";
+import type { NewPlan, Plan } from "../domain/plans";
 
 export interface Clock {
   now(): Date;
@@ -162,4 +163,19 @@ export interface StaffUnit {
   readonly staff: StaffDirectory;
   readonly audit: AuditLog;
   readonly sessions: Pick<SessionStore, "revokeAllForSubject">;
+}
+
+/** The plans of one gym. It belongs to a tenant transaction, so it only ever sees that gym's rows. */
+export interface PlanStore {
+  /** Every plan, archived ones included, so a member's old plan still reads. Ordered by key. */
+  list(): Promise<readonly Plan[]>;
+  findByKey(key: string): Promise<Plan | null>;
+  /** Returns the new plan, or null when the gym already has a plan under that key. */
+  insertIfAbsent(plan: NewPlan): Promise<Plan | null>;
+}
+
+/** Everything one plan use case needs, all inside one tenant transaction. */
+export interface PlanUnit {
+  readonly plans: PlanStore;
+  readonly audit: AuditLog;
 }
