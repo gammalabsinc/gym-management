@@ -7,6 +7,7 @@ import {
   MAX_PLAN_NAME_LENGTH,
   type Plan,
   parseDefaultPlan,
+  parsePlanFields,
 } from "./plans";
 
 const PLAN: Plan = {
@@ -52,9 +53,9 @@ describe("parseDefaultPlan", () => {
       name: "n".repeat(MAX_PLAN_NAME_LENGTH + 1),
     });
     expect(!result.ok && result.error.issues.map((issue) => issue.path[0])).toEqual([
+      "name",
       "admissionFee",
       "monthlyFee",
-      "name",
     ]);
   });
 });
@@ -69,5 +70,19 @@ describe("ensureAssignable", () => {
       ok: false,
       error: { kind: "conflict", message: "This plan is archived" },
     });
+  });
+});
+
+describe("parsePlanFields", () => {
+  it("trims the name and keeps the fees", () => {
+    expect(parsePlanFields({ name: "  Gold ", admissionFee: 1, monthlyFee: 2 })).toEqual({
+      ok: true,
+      value: { name: "Gold", admissionFee: 1, monthlyFee: 2 },
+    });
+  });
+
+  it("refuses a blank name", () => {
+    const result = parsePlanFields({ name: "   ", admissionFee: 1, monthlyFee: 2 });
+    expect(!result.ok && result.error.issues).toEqual([{ path: ["name"], message: "Required" }]);
   });
 });

@@ -1,5 +1,6 @@
 import type { Role } from "../domain/permissions";
-import type { NewPlan, Plan } from "../domain/plans";
+import type { NewPlan, Plan, PlanFields } from "../domain/plans";
+import type { Tenant } from "../domain/tenant";
 
 export interface Clock {
   now(): Date;
@@ -170,12 +171,31 @@ export interface PlanStore {
   /** Every plan, archived ones included, so a member's old plan still reads. Ordered by key. */
   list(): Promise<readonly Plan[]>;
   findByKey(key: string): Promise<Plan | null>;
+  /** The plan, locked until the transaction ends so the old values an audit event records are true. */
+  findForUpdate(id: string): Promise<Plan | null>;
+  update(id: string, fields: PlanFields): Promise<void>;
   /** Returns the new plan, or null when the gym already has a plan under that key. */
   insertIfAbsent(plan: NewPlan): Promise<Plan | null>;
 }
 
 /** Everything one plan use case needs, all inside one tenant transaction. */
 export interface PlanUnit {
+  readonly plans: PlanStore;
+  readonly audit: AuditLog;
+}
+
+/** The gym's own row: its profile and its settings. */
+export interface TenantStore {
+  find(): Promise<Tenant | null>;
+  /** Locked until the transaction ends, so two owners editing at once cannot lose an update. */
+  findForUpdate(): Promise<Tenant | null>;
+  /** Merges these keys into the settings column and leaves every other key as it is. */
+  mergeSettings(json: Readonly<Record<string, number | boolean>>): Promise<void>;
+}
+
+/** Everything the profile and settings use cases need, all inside one tenant transaction. */
+export interface SettingsUnit {
+  readonly tenants: TenantStore;
   readonly plans: PlanStore;
   readonly audit: AuditLog;
 }
