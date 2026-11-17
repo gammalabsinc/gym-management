@@ -2,7 +2,7 @@ import type { DateText } from "../domain/billing-cycle";
 import { addDays, localDateIn } from "../domain/calendar";
 import type { Discount } from "../domain/discounts";
 import { type NotFoundError, notFound, type ValidationError } from "../domain/errors";
-import { buildInvoice, cyclesToGenerate } from "../domain/invoice-build";
+import { buildInvoice, cyclesToGenerate, MAX_AHEAD_CYCLES } from "../domain/invoice-build";
 import type { MinorUnits } from "../domain/money";
 import { ok, type Result } from "../domain/result";
 import { parseUuid } from "../domain/uuid";
@@ -130,6 +130,51 @@ export async function generateInvoicesInUnit(
     });
   }
   return ok({ invoices });
+}
+
+export interface NextInvoice {
+  /** The `ahead` that makes generation build exactly this cycle, once everything up to today exists. */
+  readonly ahead: number;
+  readonly total: MinorUnits;
+}
+
+/**
+ * The next invoice that generation would write for the member, with nothing written: how far
+ * ahead of today it is and what it would total. Null when the member is not active or the next
+ * cycle is more than 12 ahead. It reads the same rows the generation reads, so the total is the
+ * one the invoice will get, and the caller holds the transaction that locked the member.
+ */
+export async function peekNextInvoice(
+  unit: InvoiceUnit,
+  clock: Clock,
+  memberId: string,
+): Promise<Result<NextInvoice | null, GenerateError>> {
+  const tenant = await unit.tenants.find();
+  if (tenant === null) throw new Error("The gym of this transaction cannot be read");
+  const member = await unit.invoices.lockMember(memberId);
+  if (member === null) return notFound("Member not found");
+  if (member.status !== "active") return ok(null);
+  const fees = await unit.invoices.findPlanFees(member.planId);
+  if (fees === null) throw new Error("The plan of a membership period cannot be read");
+  const lastPeriodEnd = await unit.invoices.lastPeriodEnd(member.id);
+  const discounts = await unit.invoices.discountsOf(member.id);
+  const today = localDateIn(clock.now(), tenant.timezone);
+  for (let ahead = 0; ahead <= MAX_AHEAD_CYCLES; ahead += 1) {
+    const cycles = cyclesToGenerate({
+      billingDay: member.billingDay,
+      activeFrom: member.activeFrom,
+      lastPeriodEnd,
+      today,
+      ahead,
+    });
+    if (!cycles.ok) return cycles;
+    const [cycle] = cycles.value;
+    if (cycle === undefined) continue;
+    const draft = buildInvoice({ cycle, ...fees, isFirst: lastPeriodEnd === null, discounts });
+    if (!draft.ok) return draft;
+    return ok({ ahead, total: draft.value.total });
+  }
+  return ok(null);
 }
 
 /**

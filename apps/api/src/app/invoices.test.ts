@@ -8,6 +8,7 @@ import {
   type InvoiceContext,
   type InvoiceDeps,
   makeGenerateInvoices,
+  peekNextInvoice,
 } from "./invoices";
 import type { AuditEvent, BillableMember, InvoiceStore, InvoiceUnit, PlanFees } from "./ports";
 
@@ -98,7 +99,15 @@ function setup(world: World = {}) {
       return fn(unit);
     },
   };
-  return { generate: makeGenerateInvoices(deps), inserted, consumed, audit, touchedTenants };
+  return {
+    generate: makeGenerateInvoices(deps),
+    inserted,
+    consumed,
+    audit,
+    touchedTenants,
+    unit,
+    deps,
+  };
 }
 
 describe("generating invoices", () => {
@@ -264,5 +273,64 @@ describe("generating invoices", () => {
     await expect(
       setup({ fees: null }).generate({ memberId: MEMBER_ID, ahead: 0 }, CTX),
     ).rejects.toThrow("plan of a membership period");
+  });
+});
+
+describe("peeking at the next invoice", () => {
+  function peek(world: World = {}) {
+    const { unit, deps, inserted, consumed, audit } = setup(world);
+    return { run: () => peekNextInvoice(unit, deps.clock, MEMBER_ID), inserted, consumed, audit };
+  }
+
+  it("gives the first cycle of a new member with its admission fee, and writes nothing", async () => {
+    const { run, inserted, consumed, audit } = peek();
+    expect(await run()).toEqual({ ok: true, value: { ahead: 0, total: 7000 } });
+    expect(inserted).toEqual([]);
+    expect(consumed).toEqual([]);
+    expect(audit).toEqual([]);
+  });
+
+  it("gives the first cycle after the last invoice, with no admission fee", async () => {
+    const { run } = peek({ lastPeriodEnd: "2026-12-14" });
+    expect(await run()).toEqual({ ok: true, value: { ahead: 1, total: 5000 } });
+  });
+
+  it("gives the total the generation would write, discounts included", async () => {
+    const world: World = { lastPeriodEnd: "2026-12-14", discounts: [discount()] };
+    const { run } = peek(world);
+    const { generate } = setup(world);
+    const peeked = await run();
+    const built = await generate(
+      { memberId: MEMBER_ID, ahead: peeked.ok ? (peeked.value?.ahead ?? 0) : 0 },
+      CTX,
+    );
+    expect(peeked).toEqual({ ok: true, value: { ahead: 1, total: 4000 } });
+    expect(built.ok && built.value.invoices.map((invoice) => invoice.total)).toEqual([4000]);
+  });
+
+  it("has nothing to give once the cycles up to 12 ahead are invoiced", async () => {
+    expect(await peek({ lastPeriodEnd: "2027-12-14" }).run()).toEqual({ ok: true, value: null });
+  });
+
+  it("has nothing to give a paused or cancelled member", async () => {
+    const { run } = peek({ member: { ...MEMBER, status: "paused" } });
+    expect(await run()).toEqual({ ok: true, value: null });
+  });
+
+  it("answers not found for a member the gym does not have", async () => {
+    expect(await peek({ member: null }).run()).toEqual({
+      ok: false,
+      error: { kind: "not_found", message: "Member not found" },
+    });
+  });
+
+  it("returns the error of a cycle it cannot work out or an invoice it cannot build", async () => {
+    expect((await peek({ lastPeriodEnd: "nonsense" }).run()).ok).toBe(false);
+    expect((await peek({ fees: { admissionFee: 0, monthlyFee: -5 } }).run()).ok).toBe(false);
+  });
+
+  it("throws when the rows a transaction should always hold are missing", async () => {
+    await expect(peek({ tenant: null }).run()).rejects.toThrow("gym of this transaction");
+    await expect(peek({ fees: null }).run()).rejects.toThrow("plan of a membership period");
   });
 });
