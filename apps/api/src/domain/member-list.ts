@@ -49,7 +49,7 @@ function parseSearch(search: string | null | undefined): Result<string | null, V
   return ok(trimmed === "" ? null : trimmed);
 }
 
-function parseLimit(limit: number | null | undefined): Result<number, ValidationError> {
+export function parseLimit(limit: number | null | undefined): Result<number, ValidationError> {
   if (limit === null || limit === undefined) return ok(DEFAULT_PAGE_SIZE);
   if (!Number.isInteger(limit) || limit < 1) {
     return validationError("Invalid page", [

@@ -1,3 +1,4 @@
+import type { AttendancePosition, DayCount } from "../domain/attendance-query";
 import type { DateText } from "../domain/billing-cycle";
 import type { Discount } from "../domain/discounts";
 import type { GymSummary } from "../domain/gym-picker";
@@ -614,6 +615,59 @@ export interface ScanStore {
 export interface ScanUnit {
   readonly scans: ScanStore;
   readonly members: Pick<MemberQueryStore, "find">;
+  readonly tenants: Pick<TenantStore, "find">;
+}
+
+/** One check in as the attendance screens show it. */
+export interface AttendanceRecord {
+  readonly id: string;
+  readonly memberId: string;
+  readonly memberName: string | null;
+  /** An instant in UTC. */
+  readonly scannedAt: string;
+  /** The scan day in the gym's time zone, written YYYY-MM-DD. */
+  readonly localDate: string;
+  readonly isDuplicate: boolean;
+  readonly statusAtScan: Standing;
+  readonly source: ScanSource;
+}
+
+/** A page of rows, newest first, that starts after `after` when it is given. */
+export interface AttendancePageRequest {
+  readonly limit: number;
+  readonly after: AttendancePosition | null;
+}
+
+/** Visits that were not duplicates, in the gym's local calendar months. */
+export interface MonthVisits {
+  readonly thisMonth: number;
+  readonly lastMonth: number;
+}
+
+/** Reads the attendance log of one gym. It belongs to a tenant transaction, so it only sees that gym's rows. */
+export interface AttendanceQueryStore {
+  memberExists(memberId: string): Promise<boolean>;
+  /** The member's scans, newest first. Duplicates are left out unless `includeDuplicates` is true. */
+  history(
+    memberId: string,
+    page: AttendancePageRequest,
+    includeDuplicates: boolean,
+  ): Promise<readonly AttendanceRecord[]>;
+  /** Every scan of one gym local day, newest first, duplicates included. */
+  onDay(localDate: string, page: AttendancePageRequest): Promise<readonly AttendanceRecord[]>;
+  /** Visits in [lastStart, thisStart) and [thisStart, nextStart), by gym local date. Duplicates never count. */
+  monthVisits(
+    memberId: string,
+    lastStart: string,
+    thisStart: string,
+    nextStart: string,
+  ): Promise<MonthVisits>;
+  /** Visits per gym local day from `from` to `to` inclusive. Days without a visit are left out. Duplicates never count. */
+  dailyCounts(from: string, to: string): Promise<readonly DayCount[]>;
+}
+
+export interface AttendanceQueryUnit {
+  readonly attendance: AttendanceQueryStore;
   readonly tenants: Pick<TenantStore, "find">;
 }
 
