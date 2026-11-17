@@ -41,25 +41,45 @@ export function daysBetween(from: string, to: string): number {
   return dayNumber(to) - dayNumber(from);
 }
 
+function formatDate(year: number, month: number, day: number): string {
+  const pad = (value: number, width: number) => String(value).padStart(width, "0");
+  return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
+}
+
+function partsOf(text: string): { year: number; month: number; day: number } {
+  return {
+    year: Number(text.slice(0, 4)),
+    month: Number(text.slice(5, 7)),
+    day: Number(text.slice(8, 10)),
+  };
+}
+
 /** The calendar day after a real calendar date. Both are written YYYY-MM-DD. */
 export function nextDate(text: string): string {
-  const year = Number(text.slice(0, 4));
-  const month = Number(text.slice(5, 7));
-  const day = Number(text.slice(8, 10));
-  const parts =
-    day < daysInMonth(year, month)
-      ? { year, month, day: day + 1 }
-      : month < 12
-        ? { year, month: month + 1, day: 1 }
-        : { year: year + 1, month: 1, day: 1 };
-  const pad = (value: number, width: number) => String(value).padStart(width, "0");
-  return `${pad(parts.year, 4)}-${pad(parts.month, 2)}-${pad(parts.day, 2)}`;
+  const { year, month, day } = partsOf(text);
+  if (day < daysInMonth(year, month)) return formatDate(year, month, day + 1);
+  return month < 12 ? formatDate(year, month + 1, 1) : formatDate(year + 1, 1, 1);
+}
+
+/** The calendar day before a real calendar date. Both are written YYYY-MM-DD. */
+export function previousDate(text: string): string {
+  const { year, month, day } = partsOf(text);
+  if (day > 1) return formatDate(year, month, day - 1);
+  if (month > 1) return formatDate(year, month - 1, daysInMonth(year, month - 1));
+  return formatDate(year - 1, 12, 31);
 }
 
 /** The calendar date `days` days after a real calendar date, for a whole number of days from 0. */
 export function addDays(text: string, days: number): string {
   let date = text;
   for (let day = 0; day < days; day += 1) date = nextDate(date);
+  return date;
+}
+
+/** The calendar date `days` days before a real calendar date, for a whole number of days from 0. */
+export function subtractDays(text: string, days: number): string {
+  let date = text;
+  for (let day = 0; day < days; day += 1) date = previousDate(date);
   return date;
 }
 

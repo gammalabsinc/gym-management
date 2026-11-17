@@ -1,6 +1,6 @@
 import type { OnboardGymInput } from "../domain/onboarding";
 
-export const MODES = ["api", "worker", "migrate", "provision", "onboard"] as const;
+export const MODES = ["api", "worker", "migrate", "provision", "onboard", "seed"] as const;
 export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 export const NODE_ENVS = ["development", "test", "production"] as const;
 

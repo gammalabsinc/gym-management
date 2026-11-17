@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "esbuild src/main/index.ts --bundle --platform=node --format=esm --target=node22 --external:zod --external:graphql --external:graphql-yoga --external:typeorm --external:pg --external:reflect-metadata --outfile=dist/index.js",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "seed": "pnpm run build && MODE=seed node dist/index.js"
   },
   "devDependencies": {
     "@gym/graphql-schema": "workspace:*",

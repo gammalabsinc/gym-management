@@ -7,6 +7,7 @@ import { makeLogger } from "../infra/logger";
 import { bootConfig } from "./boot";
 import { composeApp } from "./compose";
 import type { OnboardGym } from "./onboard";
+import type { SeedDevData } from "./seed";
 import { createHttpServer } from "./server";
 import { makeShutdown } from "./shutdown";
 import type { RunWorker } from "./worker";
@@ -22,6 +23,8 @@ export interface RunDeps {
   readonly provision: (adminDatabaseUrl: string, passwords: RolePasswordsConfig) => Promise<void>;
   /** Adds a gym, as the app role in the url. */
   readonly onboard: OnboardGym;
+  /** Seeds the local dev dataset, as the app role in the url. */
+  readonly seed: SeedDevData;
   /** Runs the daily invoice job once, as the app role in the url. */
   readonly worker: RunWorker;
   /** Opens the app role pool. */
@@ -107,6 +110,24 @@ async function runOnboarding(config: Config, deps: RunDeps): Promise<null> {
   return null;
 }
 
+async function runSeed(config: Config, deps: RunDeps): Promise<null> {
+  if (config.nodeEnv === "production") {
+    return fail(deps, "The dev seed never runs when NODE_ENV is production");
+  }
+  const gyms = await deps.seed(config.databaseUrl);
+  for (const gym of gyms) {
+    deps.write(
+      JSON.stringify({
+        msg: gym.created ? "gym seeded" : "gym already seeded",
+        subdomain: gym.subdomain,
+        tenantId: gym.tenantId,
+        members: gym.members,
+      }),
+    );
+  }
+  return null;
+}
+
 async function runWorker(config: Config, deps: RunDeps): Promise<null> {
   const logger = makeLogger({ clock: systemClock, write: deps.write, level: config.logLevel });
   const summary = await deps.worker(config.databaseUrl, logger);
@@ -118,7 +139,7 @@ async function runWorker(config: Config, deps: RunDeps): Promise<null> {
   return null;
 }
 
-/** Boots one process. MODE picks what runs: the api server or a one shot migration, role setup or gym onboarding. */
+/** Boots one process. MODE picks what runs: the api server or a one shot migration, role setup, gym onboarding or the dev seed. */
 export async function run(deps: RunDeps): Promise<Server | null> {
   const config = bootConfig(deps);
   switch (config.mode) {
@@ -130,6 +151,8 @@ export async function run(deps: RunDeps): Promise<Server | null> {
       return runProvision(config, deps);
     case "onboard":
       return runOnboarding(config, deps);
+    case "seed":
+      return runSeed(config, deps);
     case "worker":
       return runWorker(config, deps);
   }
