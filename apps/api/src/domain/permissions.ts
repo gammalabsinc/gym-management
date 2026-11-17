@@ -22,6 +22,7 @@ export const ROLE_PERMISSIONS = {
     "discount.manage",
     "settings.manage",
     "role.manage",
+    "report.read",
   ],
   staff: [
     "member.read",
