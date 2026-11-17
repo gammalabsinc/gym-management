@@ -42,7 +42,7 @@ export interface NewMember {
   readonly billingDay: number;
 }
 
-function nameIssues(name: string, field = "fullName"): FieldIssue[] {
+export function nameIssues(name: string, field = "fullName"): FieldIssue[] {
   if (name === "") return [{ path: [field], message: "Required" }];
   if (name.length > MAX_MEMBER_NAME_LENGTH) {
     return [{ path: [field], message: `At most ${MAX_MEMBER_NAME_LENGTH} characters` }];
@@ -50,7 +50,7 @@ function nameIssues(name: string, field = "fullName"): FieldIssue[] {
   return [];
 }
 
-function phoneIssues(phone: string): FieldIssue[] {
+export function phoneIssues(phone: string): FieldIssue[] {
   return phone === "" || PHONE_PATTERN.test(phone)
     ? []
     : [{ path: ["phone"], message: "Enter a valid phone number" }];

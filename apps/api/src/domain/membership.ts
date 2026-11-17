@@ -21,6 +21,13 @@ const ALLOWED_FROM: Readonly<Record<MembershipAction, readonly MembershipStatus[
   cancel: ["active", "paused"],
 };
 
+/** The action that moves a member to each status. */
+export const ACTION_TO_REACH: Readonly<Record<MembershipStatus, MembershipAction>> = {
+  paused: "pause",
+  active: "resume",
+  cancelled: "cancel",
+};
+
 /** What staff type on the pause, resume or cancel sheet. */
 export interface MembershipChangeInput {
   readonly memberId: string;

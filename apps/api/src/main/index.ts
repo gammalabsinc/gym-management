@@ -1,6 +1,7 @@
 import { connectDatabase } from "../infra/db/connection";
 import { migrateDatabase } from "../infra/db/migrate";
 import { provisionDatabase } from "../infra/db/provision";
+import { runBackfill } from "./backfill";
 import { onboardGym } from "./onboard";
 import { run } from "./run";
 import { seedDevData } from "./seed";
@@ -15,6 +16,7 @@ await run({
   provision: provisionDatabase,
   onboard: onboardGym,
   seed: seedDevData,
+  backfill: runBackfill,
   worker: runInvoiceTopUp,
   connect: connectDatabase,
   onSignal: (signal, handler) => {

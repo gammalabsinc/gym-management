@@ -572,6 +572,35 @@ export interface PaymentUnit extends InvoiceUnit {
   readonly payments: PaymentStore;
 }
 
+/** A discount as the backfill writes it: straight into the table, with no referral defaults. */
+export interface BackfillDiscountRow {
+  readonly memberId: string;
+  readonly kind: "manual" | "referral";
+  readonly referralSide: "referrer" | "referred" | null;
+  readonly sourceMemberId: string | null;
+  readonly amount: number;
+  readonly isRecurring: boolean;
+  readonly reason: string | null;
+  readonly startsOn: string;
+  readonly endsOn: string | null;
+  readonly createdBy: string;
+}
+
+/** Writes the discounts of the one off backfill. It belongs to a tenant transaction. */
+export interface BackfillStore {
+  /** Returns the new id, or null when the member already has this exact discount, so a rerun adds nothing. */
+  insertDiscountIfAbsent(row: BackfillDiscountRow): Promise<string | null>;
+}
+
+/** Everything loading one member of the old records needs, all inside one tenant transaction. */
+export interface BackfillUnit extends PaymentUnit {
+  readonly members: MemberStore;
+  readonly staff: Pick<StaffDirectory, "findByEmail" | "createUser" | "addRole" | "lockOwners">;
+  readonly plans: Pick<PlanStore, "findByKey">;
+  readonly periods: PeriodStore;
+  readonly discounts: BackfillStore;
+}
+
 /** A referral discount row to write. */
 export interface NewReferralRow extends NewReferralDiscount {
   readonly createdBy: string | null;
