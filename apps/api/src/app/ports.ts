@@ -352,6 +352,44 @@ export interface MemberUnit {
   readonly audit: AuditLog;
 }
 
+/** The current period of a member, as the membership change use cases read it. */
+export interface CurrentPeriod {
+  readonly id: string;
+  readonly planId: string;
+  readonly status: MembershipStatus;
+  /** The gym's local date the period began, written YYYY-MM-DD. */
+  readonly validFrom: string;
+}
+
+export interface NextPeriod {
+  readonly memberId: string;
+  readonly planId: string;
+  readonly status: MembershipStatus;
+  readonly validFrom: string;
+  readonly reason: string;
+  readonly changedBy: string;
+}
+
+/** The membership periods of one gym. It belongs to a tenant transaction. */
+export interface PeriodStore {
+  /**
+   * The member's current period, with the member row locked until the transaction ends, so two
+   * changes for one member take turns. Null when the gym has no such member.
+   */
+  lockCurrent(memberId: string): Promise<CurrentPeriod | null>;
+  /** Closes the period by setting its end date. */
+  close(periodId: string, validTo: string): Promise<void>;
+  /** Opens the period that follows, with no end. */
+  open(period: NextPeriod): Promise<void>;
+}
+
+/** Everything pausing, resuming or cancelling a membership needs, in one tenant transaction. */
+export interface MembershipUnit {
+  readonly periods: PeriodStore;
+  readonly tenants: Pick<TenantStore, "find">;
+  readonly audit: AuditLog;
+}
+
 /** The gyms a job works through. The tenants table is not tenant scoped. */
 export interface TenantRegistry {
   /** Every gym that is switched on, in a fixed order. */
