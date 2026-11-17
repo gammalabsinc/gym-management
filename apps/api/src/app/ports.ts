@@ -166,6 +166,7 @@ export interface StaffDirectory {
   createUser(user: {
     readonly email: string;
     readonly name: string | null;
+    readonly phone?: string | null | undefined;
   }): Promise<string | null>;
   /** Returns false when the user already held the role. */
   addRole(userId: string, role: Role): Promise<boolean>;
@@ -303,5 +304,50 @@ export interface OnboardUnit {
   readonly gyms: GymProvisioner;
   readonly staff: Pick<StaffDirectory, "createUser" | "addRole">;
   readonly plans: PlanStore;
+  readonly audit: AuditLog;
+}
+
+/** Makes the six character codes a member gets. The database decides whether a code is free. */
+export interface CodeGenerator {
+  next(): string;
+}
+
+export interface NewMemberRow {
+  readonly userId: string;
+  readonly memberNo: string;
+  readonly barcode: string;
+  readonly billingDay: number;
+  readonly referredBy: string | null;
+}
+
+export interface NewMembershipPeriod {
+  readonly memberId: string;
+  readonly planId: string;
+  /** The gym's local date the membership starts. */
+  readonly validFrom: string;
+  readonly changedBy: string;
+}
+
+/** The members of one gym. It belongs to a tenant transaction, so it only ever sees that gym's rows. */
+export interface MemberStore {
+  /** The id of the member row of this user, or null when the user is not a member. */
+  findIdByUser(userId: string): Promise<string | null>;
+  exists(memberId: string): Promise<boolean>;
+  /**
+   * Returns the new member id. Returns null, writing nothing, when the member number or the
+   * barcode is taken by any gym, or when the user already has a member row.
+   */
+  insertIfAbsent(row: NewMemberRow): Promise<string | null>;
+  /** Opens the first, active period of a member, with no end. */
+  openPeriod(period: NewMembershipPeriod): Promise<void>;
+}
+
+/** Everything creating a member needs, all inside one tenant transaction. */
+export interface MemberUnit {
+  readonly members: MemberStore;
+  readonly staff: Pick<StaffDirectory, "findByEmail" | "createUser" | "addRole">;
+  readonly plans: Pick<PlanStore, "findByKey">;
+  readonly invoices: InvoiceStore;
+  readonly tenants: Pick<TenantStore, "find">;
   readonly audit: AuditLog;
 }

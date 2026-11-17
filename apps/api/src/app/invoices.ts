@@ -56,6 +56,77 @@ function withConsumed(
   );
 }
 
+export interface GenerateInUnitInput {
+  /** A member id that is already a valid uuid. */
+  readonly memberId: string;
+  readonly ahead: number;
+}
+
+/**
+ * The body of invoice generation, for a caller that already holds the transaction, so the
+ * invoices commit or roll back together with whatever else that caller wrote.
+ */
+export async function generateInvoicesInUnit(
+  unit: InvoiceUnit,
+  clock: Clock,
+  input: GenerateInUnitInput,
+  ctx: InvoiceContext,
+): Promise<Result<GeneratedInvoices, GenerateError>> {
+  const tenant = await unit.tenants.find();
+  if (tenant === null) throw new Error("The gym of this transaction cannot be read");
+  const member = await unit.invoices.lockMember(input.memberId);
+  if (member === null) return notFound("Member not found");
+  if (member.status !== "active") return ok({ invoices: [] });
+
+  const fees = await unit.invoices.findPlanFees(member.planId);
+  if (fees === null) throw new Error("The plan of a membership period cannot be read");
+  const lastPeriodEnd = await unit.invoices.lastPeriodEnd(member.id);
+  const cycles = cyclesToGenerate({
+    billingDay: member.billingDay,
+    activeFrom: member.activeFrom,
+    lastPeriodEnd,
+    today: localDateIn(clock.now(), tenant.timezone),
+    ahead: input.ahead,
+  });
+  if (!cycles.ok) return cycles;
+
+  let discounts = await unit.invoices.discountsOf(member.id);
+  let isFirst = lastPeriodEnd === null;
+  const invoices: GeneratedInvoice[] = [];
+  for (const cycle of cycles.value) {
+    const draft = buildInvoice({ cycle, ...fees, isFirst, discounts });
+    if (!draft.ok) return draft;
+    const invoiceId = await unit.invoices.insert(member.id, draft.value);
+    // A live invoice for this cycle exists already. Nothing was written, so nothing is used up.
+    if (invoiceId === null) continue;
+    isFirst = false;
+    await unit.invoices.markConsumed(draft.value.consumedDiscountIds, invoiceId);
+    discounts = withConsumed(discounts, draft.value.consumedDiscountIds, invoiceId);
+    await unit.audit.record({
+      actorUserId: ctx.actorUserId,
+      action: INVOICE_GENERATED,
+      entityType: "invoice",
+      entityId: invoiceId,
+      before: null,
+      after: {
+        memberId: member.id,
+        periodStart: draft.value.periodStart,
+        periodEnd: draft.value.periodEnd,
+        total: draft.value.total,
+        lines: draft.value.lines.length,
+      },
+      requestId: ctx.requestId,
+    });
+    invoices.push({
+      id: invoiceId,
+      periodStart: draft.value.periodStart,
+      periodEnd: draft.value.periodEnd,
+      total: draft.value.total,
+    });
+  }
+  return ok({ invoices });
+}
+
 /**
  * Builds the next cycles of one member, up to 12 ahead, with the discount lines as they stand now.
  * Running it again builds nothing new, because the database allows one live invoice per member and
@@ -69,60 +140,13 @@ export function makeGenerateInvoices(deps: InvoiceDeps) {
   ): Promise<Result<GeneratedInvoices, GenerateError>> => {
     const memberId = parseUuid(input.memberId, "memberId");
     if (!memberId.ok) return memberId;
-    return deps.withUnit(ctx.tenantId, async (unit) => {
-      const tenant = await unit.tenants.find();
-      if (tenant === null) throw new Error("The gym of this transaction cannot be read");
-      const member = await unit.invoices.lockMember(memberId.value);
-      if (member === null) return notFound("Member not found");
-      if (member.status !== "active") return ok({ invoices: [] });
-
-      const fees = await unit.invoices.findPlanFees(member.planId);
-      if (fees === null) throw new Error("The plan of a membership period cannot be read");
-      const lastPeriodEnd = await unit.invoices.lastPeriodEnd(member.id);
-      const cycles = cyclesToGenerate({
-        billingDay: member.billingDay,
-        activeFrom: member.activeFrom,
-        lastPeriodEnd,
-        today: localDateIn(deps.clock.now(), tenant.timezone),
-        ahead: input.ahead,
-      });
-      if (!cycles.ok) return cycles;
-
-      let discounts = await unit.invoices.discountsOf(member.id);
-      let isFirst = lastPeriodEnd === null;
-      const invoices: GeneratedInvoice[] = [];
-      for (const cycle of cycles.value) {
-        const draft = buildInvoice({ cycle, ...fees, isFirst, discounts });
-        if (!draft.ok) return draft;
-        const invoiceId = await unit.invoices.insert(member.id, draft.value);
-        // A live invoice for this cycle exists already. Nothing was written, so nothing is used up.
-        if (invoiceId === null) continue;
-        isFirst = false;
-        await unit.invoices.markConsumed(draft.value.consumedDiscountIds, invoiceId);
-        discounts = withConsumed(discounts, draft.value.consumedDiscountIds, invoiceId);
-        await unit.audit.record({
-          actorUserId: ctx.actorUserId,
-          action: INVOICE_GENERATED,
-          entityType: "invoice",
-          entityId: invoiceId,
-          before: null,
-          after: {
-            memberId: member.id,
-            periodStart: draft.value.periodStart,
-            periodEnd: draft.value.periodEnd,
-            total: draft.value.total,
-            lines: draft.value.lines.length,
-          },
-          requestId: ctx.requestId,
-        });
-        invoices.push({
-          id: invoiceId,
-          periodStart: draft.value.periodStart,
-          periodEnd: draft.value.periodEnd,
-          total: draft.value.total,
-        });
-      }
-      return ok({ invoices });
-    });
+    return deps.withUnit(ctx.tenantId, (unit) =>
+      generateInvoicesInUnit(
+        unit,
+        deps.clock,
+        { memberId: memberId.value, ahead: input.ahead },
+        ctx,
+      ),
+    );
   };
 }
