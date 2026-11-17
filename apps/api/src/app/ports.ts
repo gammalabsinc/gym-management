@@ -3,6 +3,7 @@ import type { DateText } from "../domain/billing-cycle";
 import type { Discount } from "../domain/discounts";
 import type { GymSummary } from "../domain/gym-picker";
 import type { InvoiceDraft } from "../domain/invoice-build";
+import type { LedgerPosition } from "../domain/member-ledger";
 import type { MemberCursor } from "../domain/member-list";
 import type { MemberListRow, MemberView } from "../domain/member-view";
 import type {
@@ -763,4 +764,89 @@ export interface VoidUnit {
   readonly payments: Pick<PaymentStore, "unpaidInvoices" | "insertAllocations">;
   readonly invoices: Pick<InvoiceStore, "lockMember">;
   readonly audit: AuditLog;
+}
+
+/** One line of an invoice as the ledger shows it. Discount lines are negative. */
+export interface LedgerInvoiceLine {
+  readonly type: "membership" | "admission" | "discount";
+  readonly description: string;
+  readonly amount: number;
+}
+
+/** An invoice as stored, with what is still owed. The status is derived from these fields, never stored. */
+export interface LedgerInvoiceRow {
+  readonly id: string;
+  readonly periodStart: string;
+  readonly periodEnd: string;
+  readonly dueDate: string;
+  readonly total: number;
+  /** Total minus allocations of payments that are not void. */
+  readonly amountDue: number;
+  readonly isVoid: boolean;
+  readonly voidReason: string | null;
+  readonly lines: readonly LedgerInvoiceLine[];
+}
+
+export interface LedgerPaymentRow {
+  readonly id: string;
+  readonly amount: number;
+  readonly method: "cash" | "card" | "bank_transfer";
+  /** The day the money was received, written YYYY-MM-DD. */
+  readonly paidOn: string;
+  /** An instant in UTC. */
+  readonly recordedAt: string;
+  readonly recordedByName: string | null;
+  readonly isVoid: boolean;
+  readonly voidReason: string | null;
+}
+
+export interface LedgerDiscountRow {
+  readonly id: string;
+  readonly kind: "referral" | "manual";
+  /** For a referral, which side of it this member is on. */
+  readonly referralSide: "referrer" | "referred" | null;
+  /** The name of the member on the other side of a referral. */
+  readonly sourceMemberName: string | null;
+  readonly amount: number;
+  readonly isRecurring: boolean;
+  readonly reason: string | null;
+  readonly startsOn: string;
+  readonly endsOn: string | null;
+  readonly isActive: boolean;
+  readonly consumedInvoiceId: string | null;
+}
+
+export interface LedgerPeriodRow {
+  readonly id: string;
+  readonly status: "active" | "paused" | "cancelled";
+  readonly planId: string;
+  readonly planName: string;
+  readonly validFrom: string;
+  /** Null for the current period. */
+  readonly validTo: string | null;
+  readonly reason: string | null;
+}
+
+/** A page of rows, newest first, that starts after `after` when it is given. */
+export interface LedgerPageRequest {
+  readonly limit: number;
+  readonly after: LedgerPosition | null;
+}
+
+/** Reads the four lists behind the customer screen. It belongs to a tenant transaction, so it only sees that gym's rows. */
+export interface LedgerStore {
+  /** By period start. */
+  invoices(memberId: string, page: LedgerPageRequest): Promise<readonly LedgerInvoiceRow[]>;
+  /** By date received. */
+  payments(memberId: string, page: LedgerPageRequest): Promise<readonly LedgerPaymentRow[]>;
+  /** By start date. */
+  discounts(memberId: string, page: LedgerPageRequest): Promise<readonly LedgerDiscountRow[]>;
+  /** By start date. */
+  periods(memberId: string, page: LedgerPageRequest): Promise<readonly LedgerPeriodRow[]>;
+}
+
+export interface LedgerUnit {
+  readonly ledger: LedgerStore;
+  readonly members: Pick<MemberStore, "findIdByUser" | "exists">;
+  readonly tenants: Pick<TenantStore, "find">;
 }

@@ -1,5 +1,6 @@
 import { daysBetween, isCalendarDate } from "./calendar";
 import { type FieldIssue, type ValidationError, validationError } from "./errors";
+import { isOwing } from "./invoice-status";
 import { isMinorUnits, type MinorUnits } from "./money";
 import { ok, type Result } from "./result";
 
@@ -74,7 +75,7 @@ function validate(input: StandingInput): Result<StandingInput, ValidationError> 
 /** The oldest unpaid invoice decides standing. Voided and fully paid invoices are ignored. */
 function oldestUnpaidDueDate(invoices: readonly InvoiceDue[]): string | null {
   return invoices
-    .filter((invoice) => !invoice.isVoid && invoice.amountDue > 0)
+    .filter(isOwing)
     .reduce<string | null>(
       (oldest, invoice) => (oldest === null || invoice.dueDate < oldest ? invoice.dueDate : oldest),
       null,

@@ -20,8 +20,14 @@ describe("ROLE_PERMISSIONS", () => {
     }
   });
 
-  it("gives a member no permission", () => {
-    expect(permissionsOf("member")).toEqual([]);
+  it("gives a member the right to read their own record and nothing else", () => {
+    expect(permissionsOf("member")).toEqual(["member.read.own"]);
+    expect(hasPermission(["member"], "member.read")).toBe(false);
+  });
+
+  it("lets staff and owners read their own record too", () => {
+    expect(hasPermission(["staff"], "member.read.own")).toBe(true);
+    expect(hasPermission(["owner"], "member.read.own")).toBe(true);
   });
 
   it("keeps cancelling a membership with the owner by default", () => {
