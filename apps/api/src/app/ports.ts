@@ -390,6 +390,29 @@ export interface MembershipUnit {
   readonly audit: AuditLog;
 }
 
+/** The profile fields of a member that an edit can change. They live on the member's user row. */
+export interface MemberProfile {
+  readonly userId: string;
+  readonly name: string | null;
+  readonly phone: string | null;
+}
+
+/** The profiles of one gym. It belongs to a tenant transaction. */
+export interface ProfileStore {
+  /** The member's profile, locked until the transaction ends. Null when the gym has no such member. */
+  lock(memberId: string): Promise<MemberProfile | null>;
+  update(
+    userId: string,
+    change: { readonly name?: string; readonly phone?: string | null },
+  ): Promise<void>;
+}
+
+/** Everything editing a member profile needs, in one tenant transaction. */
+export interface ProfileUnit {
+  readonly profiles: ProfileStore;
+  readonly audit: AuditLog;
+}
+
 /** The gyms a job works through. The tenants table is not tenant scoped. */
 export interface TenantRegistry {
   /** Every gym that is switched on, in a fixed order. */
