@@ -1,13 +1,10 @@
+import type { RequestSession } from "../app/request-session";
 import type { RequestContext, RequestContextInput } from "./request-context";
 
-/** Who is calling. Sessions are issued by the auth tickets; until then nobody is signed in. */
-export interface Session {
-  readonly userId: string;
-  /** Null for an identity session, which has not selected a gym yet. */
-  readonly tenantId: string | null;
-}
+/** Who is calling. A session is an identity session until the person picks a gym. */
+export type Session = RequestSession;
 
-export type SessionResolver = (request: Request) => Session | null;
+export type SessionResolver = (request: Request) => Promise<Session | null>;
 
 export interface GraphQLContext {
   readonly requestId: string;
@@ -23,13 +20,23 @@ export interface ContextDeps {
 }
 
 const REQUEST_ID_HEADER = "x-request-id";
+const AUTHORIZATION_HEADER = "authorization";
 
-export function makeContextBuilder(deps: ContextDeps): (request: Request) => GraphQLContext {
-  return (request) => {
-    const session = deps.resolveSession(request);
+/** Reads the bearer token of a request and resolves it to a session, or to none. */
+export function bearerSessionResolver(
+  resolve: (authorization: string | null) => Promise<Session | null>,
+): SessionResolver {
+  return (request) => resolve(request.headers.get(AUTHORIZATION_HEADER));
+}
+
+export function makeContextBuilder(
+  deps: ContextDeps,
+): (request: Request) => Promise<GraphQLContext> {
+  return async (request) => {
+    const session = await deps.resolveSession(request);
     const tenantId = session?.tenantId ?? null;
     const scope = {
-      ...(session === null ? {} : { userId: session.userId }),
+      ...(session?.userId == null ? {} : { userId: session.userId }),
       ...(tenantId === null ? {} : { tenantId }),
     };
     const { requestId, logger } = deps.requestContext({

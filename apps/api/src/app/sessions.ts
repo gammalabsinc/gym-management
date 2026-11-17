@@ -21,6 +21,8 @@ export interface IssuedSession {
 export interface AuthenticatedSession {
   readonly sessionId: string;
   readonly subject: string;
+  /** Null until the person picks a gym. */
+  readonly gymId: string | null;
 }
 
 export interface Sessions {
@@ -56,7 +58,7 @@ export function makeSessions(deps: SessionDeps): Sessions {
       if (!isUsableToken(token)) return unauthenticated();
       const session = await deps.store.findByTokenHash(deps.tokens.hash(token));
       if (session === null || !isSessionLive(session, deps.clock.now())) return unauthenticated();
-      return ok({ sessionId: session.id, subject: session.subject });
+      return ok({ sessionId: session.id, subject: session.subject, gymId: session.gymId });
     },
 
     /** Signing out twice, or with a token we never issued, is not an error. */

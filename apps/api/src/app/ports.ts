@@ -100,6 +100,8 @@ export interface StoredSession {
   readonly subject: string;
   readonly expiresAt: Date;
   readonly revokedAt: Date | null;
+  /** The gym the session is bound to. Null for an identity session that has not picked one. */
+  readonly gymId: string | null;
 }
 
 export interface NewSession {
@@ -118,6 +120,13 @@ export interface SessionStore {
   revokeByTokenHash(tokenHash: string, at: Date): Promise<void>;
   /** Revokes every live session of one person. Returns how many were revoked. */
   revokeAllForSubject(subject: string, at: Date): Promise<number>;
+  /** Binds a live session to a gym, replacing an earlier gym. A revoked session is left alone. */
+  bindGym(sessionId: string, gymId: string): Promise<void>;
+}
+
+/** Tells whether a gym exists and is switched on. The tenants table is not tenant scoped. */
+export interface GymRegistry {
+  isActive(gymId: string): Promise<boolean>;
 }
 
 /** Makes session tokens and turns a presented token into the value the store is keyed by. */

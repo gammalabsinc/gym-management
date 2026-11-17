@@ -6,6 +6,7 @@ interface SessionRow {
   auth_subject: string;
   expires_at: Date;
   revoked_at: Date | null;
+  gym_id: string | null;
 }
 
 function toSession(row: SessionRow): StoredSession {
@@ -14,6 +15,7 @@ function toSession(row: SessionRow): StoredSession {
     subject: row.auth_subject,
     expiresAt: row.expires_at,
     revokedAt: row.revoked_at,
+    gymId: row.gym_id,
   };
 }
 
@@ -33,7 +35,7 @@ export function makeSessionStore(executor: SqlExecutor): SessionStore {
 
     async findByTokenHash(tokenHash) {
       const rows = (await executor.query(
-        "SELECT id, auth_subject, expires_at, revoked_at FROM sessions WHERE token_hash = $1",
+        "SELECT id, auth_subject, expires_at, revoked_at, gym_id FROM sessions WHERE token_hash = $1",
         [tokenHash],
       )) as SessionRow[];
       const row = rows[0];
@@ -55,6 +57,13 @@ export function makeSessionStore(executor: SqlExecutor): SessionStore {
         [subject, at],
       )) as unknown[];
       return rows.length;
+    },
+
+    async bindGym(sessionId, gymId) {
+      await executor.query("UPDATE sessions SET gym_id = $2 WHERE id = $1 AND revoked_at IS NULL", [
+        sessionId,
+        gymId,
+      ]);
     },
   };
 }
