@@ -25,6 +25,18 @@ const RANK_SQL = `CASE s.standing
 END`;
 
 /**
+ * Joins what has been paid on invoice `i` as `a.counted`: allocations of payments that are not
+ * void. The invoice ledger reads the same join, so both agree on what is still owing.
+ */
+export const COUNTED_ALLOCATIONS_SQL = `LEFT JOIN LATERAL (
+        SELECT sum(al.amount) AS counted
+          FROM payment_allocations al
+          JOIN payments pay
+            ON pay.tenant_id = al.tenant_id AND pay.id = al.payment_id AND NOT pay.is_void
+         WHERE al.tenant_id = i.tenant_id AND al.invoice_id = i.id
+      ) a ON true`;
+
+/**
  * Every member of the tenant with the derived fields. Money is counted from live invoices and
  * from allocations of payments that are not void. The sums are cast to int because every amount
  * in the schema is a 32 bit integer.
@@ -35,13 +47,7 @@ const MEMBER_ROWS = `
            COALESCE(a.counted, 0)::int AS counted,
            i.total - COALESCE(a.counted, 0)::int AS amount_due
       FROM invoices i
-      LEFT JOIN LATERAL (
-        SELECT sum(al.amount) AS counted
-          FROM payment_allocations al
-          JOIN payments pay
-            ON pay.tenant_id = al.tenant_id AND pay.id = al.payment_id AND NOT pay.is_void
-         WHERE al.tenant_id = i.tenant_id AND al.invoice_id = i.id
-      ) a ON true
+      ${COUNTED_ALLOCATIONS_SQL}
      WHERE i.tenant_id = $1 AND NOT i.is_void
   ),
   member_money AS (
