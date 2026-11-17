@@ -1,6 +1,7 @@
 import { connectDatabase } from "../infra/db/connection";
 import { migrateDatabase } from "../infra/db/migrate";
 import { provisionDatabase } from "../infra/db/provision";
+import { onboardGym } from "./onboard";
 import { run } from "./run";
 
 await run({
@@ -10,6 +11,7 @@ await run({
   exit: (code) => process.exit(code),
   migrate: migrateDatabase,
   provision: provisionDatabase,
+  onboard: onboardGym,
   connect: connectDatabase,
   onSignal: (signal, handler) => {
     process.once(signal, handler);

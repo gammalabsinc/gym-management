@@ -144,3 +144,63 @@ describe("redactConfig", () => {
     expect(redacted).toMatchObject({ databaseUrl: "[redacted]", port: 3000 });
   });
 });
+
+describe("onboarding variables", () => {
+  const gym = {
+    GYM_NAME: "Iron Works",
+    GYM_SUBDOMAIN: "iron-works",
+    GYM_TIMEZONE: "America/Toronto",
+    GYM_CURRENCY: "CAD",
+    OWNER_EMAIL: "owner@example.test",
+  };
+
+  it("are left out unless every required variable is set", () => {
+    expect(parseConfig(validEnv)).not.toHaveProperty("onboarding");
+    for (const missing of Object.keys(gym)) {
+      const partial = { ...gym, [missing]: undefined };
+      expect(parseConfig({ ...validEnv, ...partial })).not.toHaveProperty("onboarding");
+    }
+  });
+
+  it("are read with the fees defaulting to zero", () => {
+    expect(parseConfig({ ...validEnv, ...gym }).onboarding).toEqual({
+      name: "Iron Works",
+      subdomain: "iron-works",
+      timezone: "America/Toronto",
+      currency: "CAD",
+      ownerEmail: "owner@example.test",
+      ownerName: undefined,
+      admissionFee: 0,
+      monthlyFee: 0,
+    });
+  });
+
+  it("carry the owner name and the fees when set", () => {
+    const config = parseConfig({
+      ...validEnv,
+      ...gym,
+      OWNER_NAME: "Sam Owner",
+      ADMISSION_FEE: "2000",
+      MONTHLY_FEE: "5000",
+    });
+    expect(config.onboarding).toMatchObject({
+      ownerName: "Sam Owner",
+      admissionFee: 2000,
+      monthlyFee: 5000,
+    });
+  });
+
+  it("refuse a fee that is not a whole number of minor units", () => {
+    for (const value of ["-1", "1.5", "abc", "3000000000"]) {
+      expect(problemsOf({ ...validEnv, ...gym, MONTHLY_FEE: value })).toEqual([
+        expect.stringMatching(/^MONTHLY_FEE: /),
+      ]);
+    }
+  });
+
+  it("are redacted for logs", () => {
+    const config = parseConfig({ ...validEnv, ...gym });
+    expect(JSON.stringify(redactConfig(config))).not.toContain("owner@example.test");
+    expect(redactConfig(config)).toMatchObject({ onboarding: "[redacted]" });
+  });
+});

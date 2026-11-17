@@ -1,6 +1,11 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { OnboardedGym } from "../app/onboarding";
+import type { ValidationError } from "../domain/errors";
+import { validationError } from "../domain/errors";
+import type { OnboardGymInput } from "../domain/onboarding";
+import { ok, type Result } from "../domain/result";
 import { run } from "./run";
 
 class ExitSignal extends Error {}
@@ -17,6 +22,10 @@ function makeDeps(env: Record<string, string | undefined>) {
   const provision = vi.fn(async (_url: string, _passwords: unknown): Promise<void> => {});
   const database = { ping: vi.fn(async () => {}), close: vi.fn(async () => {}) };
   const connect = vi.fn(async (_url: string) => database);
+  const onboard = vi.fn(
+    async (_url: string, _input: OnboardGymInput): Promise<Result<OnboardedGym, ValidationError>> =>
+      ok({ tenantId: "tenant-1", subdomain: "iron-works", created: true }),
+  );
   const handlers = new Map<string, () => void>();
   const onSignal = vi.fn((signal: string, handler: () => void) => {
     handlers.set(signal, handler);
@@ -29,6 +38,7 @@ function makeDeps(env: Record<string, string | undefined>) {
       exit,
       migrate,
       provision,
+      onboard,
       connect,
       onSignal,
     },
@@ -40,6 +50,7 @@ function makeDeps(env: Record<string, string | undefined>) {
     exit,
     migrate,
     provision,
+    onboard,
   };
 }
 
@@ -206,6 +217,94 @@ describe("run in provision mode", () => {
     const { deps, provision } = makeDeps({ DATABASE_URL, MODE: "provision", ...passwordEnv });
     provision.mockRejectedValueOnce(new Error("permission denied"));
     await expect(run(deps)).rejects.toThrow("permission denied");
+  });
+});
+
+describe("run in onboard mode", () => {
+  const gymEnv = {
+    GYM_NAME: "Iron Works",
+    GYM_SUBDOMAIN: "iron-works",
+    GYM_TIMEZONE: "America/Toronto",
+    GYM_CURRENCY: "CAD",
+    OWNER_EMAIL: "owner@example.test",
+  };
+
+  it("adds the gym through the app url and reports the new gym", async () => {
+    const { deps, lines, onboard, connect } = makeDeps({
+      DATABASE_URL,
+      MODE: "onboard",
+      ...gymEnv,
+      OWNER_NAME: "Sam Owner",
+      ADMISSION_FEE: "2000",
+      MONTHLY_FEE: "5000",
+    });
+    expect(await run(deps)).toBeNull();
+    expect(onboard).toHaveBeenCalledWith(DATABASE_URL, {
+      name: "Iron Works",
+      subdomain: "iron-works",
+      timezone: "America/Toronto",
+      currency: "CAD",
+      ownerEmail: "owner@example.test",
+      ownerName: "Sam Owner",
+      admissionFee: 2000,
+      monthlyFee: 5000,
+    });
+    expect(JSON.parse(lines[0] ?? "{}")).toEqual({
+      msg: "gym created",
+      tenantId: "tenant-1",
+      subdomain: "iron-works",
+    });
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it("says so when the gym was already there", async () => {
+    const { deps, lines, onboard } = makeDeps({ DATABASE_URL, MODE: "onboard", ...gymEnv });
+    onboard.mockResolvedValueOnce(ok({ tenantId: "t", subdomain: "iron-works", created: false }));
+    expect(await run(deps)).toBeNull();
+    expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({ msg: "gym already exists" });
+  });
+
+  it.each([
+    ["no gym variables", {}],
+    ["no owner email", { ...gymEnv, OWNER_EMAIL: undefined }],
+    ["no subdomain", { ...gymEnv, GYM_SUBDOMAIN: undefined }],
+  ])("refuses to run with %s", async (_name, extra) => {
+    const { deps, writeError, exit, onboard } = makeDeps({
+      DATABASE_URL,
+      MODE: "onboard",
+      ...extra,
+    });
+    await expect(run(deps)).rejects.toThrow(ExitSignal);
+    expect(writeError).toHaveBeenCalledWith(
+      "GYM_NAME, GYM_SUBDOMAIN, GYM_TIMEZONE, GYM_CURRENCY and OWNER_EMAIL are required when MODE=onboard",
+    );
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(onboard).not.toHaveBeenCalled();
+  });
+
+  it("prints every problem with the input and exits non zero", async () => {
+    const { deps, writeError, exit, onboard } = makeDeps({
+      DATABASE_URL,
+      MODE: "onboard",
+      ...gymEnv,
+    });
+    onboard.mockResolvedValueOnce(
+      validationError("Invalid gym", [
+        { path: ["subdomain"], message: "Use lower case letters" },
+        { path: ["currency"], message: "Use a three letter code" },
+      ]),
+    );
+    await expect(run(deps)).rejects.toThrow(ExitSignal);
+    expect(writeError).toHaveBeenCalledWith(
+      "Invalid gym:\n  subdomain: Use lower case letters\n  currency: Use a three letter code",
+    );
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("lets a failed onboarding reject so the process exits non zero", async () => {
+    const { deps, onboard } = makeDeps({ DATABASE_URL, MODE: "onboard", ...gymEnv });
+    onboard.mockRejectedValueOnce(new Error("connection refused"));
+    await expect(run(deps)).rejects.toThrow("connection refused");
   });
 });
 

@@ -1,4 +1,6 @@
-export const MODES = ["api", "worker", "migrate", "provision"] as const;
+import type { OnboardGymInput } from "../domain/onboarding";
+
+export const MODES = ["api", "worker", "migrate", "provision", "onboard"] as const;
 export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 export const NODE_ENVS = ["development", "test", "production"] as const;
 
@@ -17,6 +19,8 @@ export interface Config {
    * databaseUrl must then be an administrator url, not the app role.
    */
   readonly rolePasswords?: RolePasswordsConfig;
+  /** Only the onboard mode needs it. Left out unless every required variable is set. */
+  readonly onboarding?: OnboardGymInput;
 }
 
 export interface RolePasswordsConfig {
