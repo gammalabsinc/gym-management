@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { TopUpSummary } from "../app/invoice-top-up";
 import type { OnboardedGym } from "../app/onboarding";
 import type { ValidationError } from "../domain/errors";
 import { validationError } from "../domain/errors";
@@ -26,6 +27,15 @@ function makeDeps(env: Record<string, string | undefined>) {
     async (_url: string, _input: OnboardGymInput): Promise<Result<OnboardedGym, ValidationError>> =>
       ok({ tenantId: "tenant-1", subdomain: "iron-works", created: true }),
   );
+  const worker = vi.fn(
+    async (_url: string, _logger: unknown): Promise<TopUpSummary> => ({
+      tenants: 2,
+      skippedTenants: 0,
+      failedTenants: 0,
+      invoices: 3,
+      failedMembers: 0,
+    }),
+  );
   const handlers = new Map<string, () => void>();
   const onSignal = vi.fn((signal: string, handler: () => void) => {
     handlers.set(signal, handler);
@@ -39,6 +49,7 @@ function makeDeps(env: Record<string, string | undefined>) {
       migrate,
       provision,
       onboard,
+      worker,
       connect,
       onSignal,
     },
@@ -51,6 +62,7 @@ function makeDeps(env: Record<string, string | undefined>) {
     migrate,
     provision,
     onboard,
+    worker,
   };
 }
 
@@ -308,14 +320,56 @@ describe("run in onboard mode", () => {
   });
 });
 
-describe("run in other modes", () => {
-  it("refuses a mode that is not implemented yet", async () => {
-    const { deps, writeError, exit } = makeDeps({ DATABASE_URL, MODE: "worker" });
+describe("run in worker mode", () => {
+  it("runs the invoice job once with a logger, writes the summary and exits normally", async () => {
+    const { deps, worker, lines, exit } = makeDeps({ DATABASE_URL, MODE: "worker" });
+    expect(await run(deps)).toBeNull();
+    expect(worker).toHaveBeenCalledTimes(1);
+    expect(worker.mock.calls[0]?.[0]).toBe(DATABASE_URL);
+    expect(JSON.parse(lines.at(-1) ?? "{}")).toEqual({
+      msg: "invoice top up finished",
+      tenants: 2,
+      skippedTenants: 0,
+      failedTenants: 0,
+      invoices: 3,
+      failedMembers: 0,
+    });
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it("gives the job a logger that writes JSON lines through the same output", async () => {
+    const { deps, worker, lines } = makeDeps({ DATABASE_URL, MODE: "worker", LOG_LEVEL: "info" });
+    worker.mockImplementationOnce(async (_url, logger) => {
+      (logger as { info(message: string): void }).info("hello from the job");
+      return { tenants: 0, skippedTenants: 0, failedTenants: 0, invoices: 0, failedMembers: 0 };
+    });
+    await run(deps);
+    expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({ msg: "hello from the job" });
+  });
+
+  it("exits non zero when a gym failed, after writing the summary", async () => {
+    const { deps, worker, lines, writeError, exit } = makeDeps({ DATABASE_URL, MODE: "worker" });
+    worker.mockResolvedValueOnce({
+      tenants: 2,
+      skippedTenants: 0,
+      failedTenants: 1,
+      invoices: 1,
+      failedMembers: 2,
+    });
     await expect(run(deps)).rejects.toThrow(ExitSignal);
-    expect(writeError).toHaveBeenCalledWith("MODE=worker is not implemented yet");
+    expect(JSON.parse(lines.at(-1) ?? "{}")).toMatchObject({ failedTenants: 1, failedMembers: 2 });
+    expect(writeError).toHaveBeenCalledWith("Invoice top up failed for 1 gym(s), see the log");
     expect(exit).toHaveBeenCalledWith(1);
   });
 
+  it("lets a job that cannot even start reject, so the process exits non zero", async () => {
+    const { deps, worker } = makeDeps({ DATABASE_URL, MODE: "worker" });
+    worker.mockRejectedValueOnce(new Error("connection refused"));
+    await expect(run(deps)).rejects.toThrow("connection refused");
+  });
+});
+
+describe("run in other modes", () => {
   it("fails fast on an invalid environment", async () => {
     const { deps, exit } = makeDeps({});
     await expect(run(deps)).rejects.toThrow(ExitSignal);
