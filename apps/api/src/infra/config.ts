@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type Config, LOG_LEVELS, MODES, NODE_ENVS } from "../app/config";
+import { type BackfillConfig, type Config, LOG_LEVELS, MODES, NODE_ENVS } from "../app/config";
 import type { OnboardGymInput } from "../domain/onboarding";
 import { MAX_FEE } from "../domain/plans";
 
@@ -45,6 +45,22 @@ function onboardingFrom(env: OnboardingEnv): { readonly onboarding?: OnboardGymI
   };
 }
 
+/** The backfill settings, or nothing at all unless both the gym and the file are set. */
+function backfillFrom(env: {
+  readonly BACKFILL_TENANT_ID?: string | undefined;
+  readonly BACKFILL_FILE?: string | undefined;
+  readonly BACKFILL_DRY_RUN: boolean;
+}): { readonly backfill?: BackfillConfig } {
+  if (env.BACKFILL_TENANT_ID === undefined || env.BACKFILL_FILE === undefined) return {};
+  return {
+    backfill: {
+      tenantId: env.BACKFILL_TENANT_ID,
+      file: env.BACKFILL_FILE,
+      dryRun: env.BACKFILL_DRY_RUN,
+    },
+  };
+}
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(NODE_ENVS).default("development"),
@@ -63,6 +79,9 @@ const envSchema = z
     OWNER_NAME: z.string().optional(),
     ADMISSION_FEE: z.coerce.number().int().min(0).max(MAX_FEE).optional(),
     MONTHLY_FEE: z.coerce.number().int().min(0).max(MAX_FEE).optional(),
+    BACKFILL_TENANT_ID: z.guid().optional(),
+    BACKFILL_FILE: z.string().min(1).optional(),
+    BACKFILL_DRY_RUN: z.stringbool().default(false),
   })
   .transform(
     (env): Config => ({
@@ -83,6 +102,7 @@ const envSchema = z
             },
           }),
       ...onboardingFrom(env),
+      ...backfillFrom(env),
     }),
   );
 

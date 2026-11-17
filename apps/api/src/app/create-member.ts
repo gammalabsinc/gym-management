@@ -51,11 +51,11 @@ type CreateError = ValidationError | ConflictError;
  * insert can be refused. The loop is bounded, so a database that refuses every code is a bug and
  * throws, which rolls the whole change back.
  */
-async function insertWithFreeCodes(
-  unit: MemberUnit,
+export async function insertWithFreeCodes(
+  unit: Pick<MemberUnit, "members">,
   codes: CodeGenerator,
   userId: string,
-  member: NewMember,
+  member: Pick<NewMember, "billingDay" | "referredBy">,
 ): Promise<Result<{ memberId: string; memberNo: string; barcode: string }, ConflictError>> {
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
     const memberNo = codes.next();

@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { BackfillReport } from "../app/backfill";
 import type { TopUpSummary } from "../app/invoice-top-up";
 import type { OnboardedGym } from "../app/onboarding";
 import type { SeededGym } from "../app/seed-dev-data";
@@ -34,6 +35,23 @@ function makeDeps(env: Record<string, string | undefined>) {
       { subdomain: "pulsefit", tenantId: "tenant-2", created: false, members: 0 },
     ],
   );
+  const backfill = vi.fn(
+    async (_url: string, _options: unknown): Promise<Result<BackfillReport, ValidationError>> =>
+      ok({
+        members: [
+          {
+            email: "ada@example.test",
+            outcome: "created",
+            statusChanges: 1,
+            invoices: 4,
+            payments: 2,
+            paymentsSkipped: 0,
+            discounts: 1,
+            problem: null,
+          },
+        ],
+      }),
+  );
   const worker = vi.fn(
     async (_url: string, _logger: unknown): Promise<TopUpSummary> => ({
       tenants: 2,
@@ -57,6 +75,7 @@ function makeDeps(env: Record<string, string | undefined>) {
       provision,
       onboard,
       seed,
+      backfill,
       worker,
       connect,
       onSignal,
@@ -71,6 +90,7 @@ function makeDeps(env: Record<string, string | undefined>) {
     provision,
     onboard,
     seed,
+    backfill,
     worker,
   };
 }
@@ -358,6 +378,92 @@ describe("run in seed mode", () => {
     const { deps, seed } = makeDeps({ DATABASE_URL, MODE: "seed" });
     seed.mockRejectedValueOnce(new Error("connection refused"));
     await expect(run(deps)).rejects.toThrow("connection refused");
+  });
+});
+
+const TENANT_ID = "22222222-2222-4222-8222-222222222222";
+const BACKFILL_ENV = {
+  DATABASE_URL,
+  MODE: "backfill",
+  BACKFILL_TENANT_ID: TENANT_ID,
+  BACKFILL_FILE: "members.json",
+};
+
+describe("run in backfill mode", () => {
+  it("loads the file for the gym and reports each member", async () => {
+    const { deps, backfill, lines, exit } = makeDeps(BACKFILL_ENV);
+    expect(await run(deps)).toBeNull();
+    expect(backfill).toHaveBeenCalledWith(DATABASE_URL, {
+      tenantId: TENANT_ID,
+      file: "members.json",
+      dryRun: false,
+    });
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      {
+        msg: "backfill",
+        email: "ada@example.test",
+        outcome: "created",
+        statusChanges: 1,
+        invoices: 4,
+        payments: 2,
+        paymentsSkipped: 0,
+        discounts: 1,
+        problem: null,
+      },
+    ]);
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it("says so on every line of a dry run", async () => {
+    const { deps, backfill, lines } = makeDeps({ ...BACKFILL_ENV, BACKFILL_DRY_RUN: "true" });
+    await run(deps);
+    expect(backfill).toHaveBeenCalledWith(DATABASE_URL, expect.objectContaining({ dryRun: true }));
+    expect(JSON.parse(lines[0] ?? "{}").msg).toBe("backfill dry run");
+  });
+
+  it("needs the gym and the file", async () => {
+    const { deps, backfill, writeError } = makeDeps({ DATABASE_URL, MODE: "backfill" });
+    await expect(run(deps)).rejects.toThrow("exit 1");
+    expect(writeError).toHaveBeenCalledWith(
+      "BACKFILL_TENANT_ID and BACKFILL_FILE are required when MODE=backfill",
+    );
+    expect(backfill).not.toHaveBeenCalled();
+  });
+
+  it("prints every problem of an invalid file and exits non zero", async () => {
+    const { deps, backfill, writeError } = makeDeps(BACKFILL_ENV);
+    backfill.mockResolvedValueOnce(
+      validationError("Invalid backfill", [
+        { path: ["members", 0, "joinDate"], message: "Cannot be in the future" },
+      ]),
+    );
+    await expect(run(deps)).rejects.toThrow("exit 1");
+    expect(writeError).toHaveBeenCalledWith(
+      "Invalid backfill:\n  members.0.joinDate: Cannot be in the future",
+    );
+  });
+
+  it("exits non zero when a member was not loaded", async () => {
+    const { deps, backfill, writeError, lines } = makeDeps(BACKFILL_ENV);
+    backfill.mockResolvedValueOnce(
+      ok({
+        members: [
+          {
+            email: "bo@example.test",
+            outcome: "failed",
+            statusChanges: 0,
+            invoices: 0,
+            payments: 0,
+            paymentsSkipped: 0,
+            discounts: 0,
+            problem: "The referral source ada@example.test is not a member yet",
+          },
+        ],
+      }),
+    );
+    await expect(run(deps)).rejects.toThrow("exit 1");
+    expect(lines).toHaveLength(1);
+    expect(writeError).toHaveBeenCalledWith("1 member(s) were not loaded, see the log");
   });
 });
 

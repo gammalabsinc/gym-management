@@ -4,6 +4,7 @@ import { systemClock } from "../infra/clock";
 import type { Env } from "../infra/config";
 import type { Database } from "../infra/db/connection";
 import { makeLogger } from "../infra/logger";
+import type { RunBackfill } from "./backfill";
 import { bootConfig } from "./boot";
 import { composeApp } from "./compose";
 import type { OnboardGym } from "./onboard";
@@ -25,6 +26,8 @@ export interface RunDeps {
   readonly onboard: OnboardGym;
   /** Seeds the local dev dataset, as the app role in the url. */
   readonly seed: SeedDevData;
+  /** Loads a gym's old members from a file, as the app role in the url. */
+  readonly backfill: RunBackfill;
   /** Runs the daily invoice job once, as the app role in the url. */
   readonly worker: RunWorker;
   /** Opens the app role pool. */
@@ -128,6 +131,28 @@ async function runSeed(config: Config, deps: RunDeps): Promise<null> {
   return null;
 }
 
+async function runBackfill(config: Config, deps: RunDeps): Promise<null> {
+  if (config.backfill === undefined) {
+    return fail(deps, "BACKFILL_TENANT_ID and BACKFILL_FILE are required when MODE=backfill");
+  }
+  const { dryRun } = config.backfill;
+  const result = await deps.backfill(config.databaseUrl, config.backfill);
+  if (!result.ok) {
+    return fail(
+      deps,
+      `Invalid backfill:\n${result.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n")}`,
+    );
+  }
+  for (const member of result.value.members) {
+    deps.write(JSON.stringify({ msg: dryRun ? "backfill dry run" : "backfill", ...member }));
+  }
+  const failed = result.value.members.filter((member) => member.outcome === "failed");
+  if (failed.length > 0) {
+    return fail(deps, `${failed.length} member(s) were not loaded, see the log`);
+  }
+  return null;
+}
+
 async function runWorker(config: Config, deps: RunDeps): Promise<null> {
   const logger = makeLogger({ clock: systemClock, write: deps.write, level: config.logLevel });
   const summary = await deps.worker(config.databaseUrl, logger);
@@ -139,7 +164,7 @@ async function runWorker(config: Config, deps: RunDeps): Promise<null> {
   return null;
 }
 
-/** Boots one process. MODE picks what runs: the api server or a one shot migration, role setup, gym onboarding or the dev seed. */
+/** Boots one process. MODE picks what runs: the api server or a one shot migration, role setup, gym onboarding, the dev seed or the backfill. */
 export async function run(deps: RunDeps): Promise<Server | null> {
   const config = bootConfig(deps);
   switch (config.mode) {
@@ -153,6 +178,8 @@ export async function run(deps: RunDeps): Promise<Server | null> {
       return runOnboarding(config, deps);
     case "seed":
       return runSeed(config, deps);
+    case "backfill":
+      return runBackfill(config, deps);
     case "worker":
       return runWorker(config, deps);
   }
