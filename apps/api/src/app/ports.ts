@@ -2,6 +2,8 @@ import type { DateText } from "../domain/billing-cycle";
 import type { Discount } from "../domain/discounts";
 import type { GymSummary } from "../domain/gym-picker";
 import type { InvoiceDraft } from "../domain/invoice-build";
+import type { MemberCursor } from "../domain/member-list";
+import type { MemberListRow, MemberView } from "../domain/member-view";
 import type { Role } from "../domain/permissions";
 import type { NewPlan, Plan, PlanFields } from "../domain/plans";
 import type { MembershipStatus } from "../domain/standing";
@@ -411,6 +413,37 @@ export interface ProfileStore {
 export interface ProfileUnit {
   readonly profiles: ProfileStore;
   readonly audit: AuditLog;
+}
+
+/** What the member queries need to derive a member's standing and counts. */
+export interface MemberQueryContext {
+  /** The gym's local date. */
+  readonly today: string;
+  readonly warnDaysBefore: number;
+  readonly redDaysAfter: number;
+  /** First day of last month, this month and next month, by the gym's calendar. */
+  readonly lastMonthStart: string;
+  readonly thisMonthStart: string;
+  readonly nextMonthStart: string;
+}
+
+export interface MemberPageRequest {
+  readonly search: string | null;
+  /** Rows to return. The use case asks for one more than the page size to learn if there is a next page. */
+  readonly limit: number;
+  readonly after: MemberCursor | null;
+}
+
+/** Reads members with their derived fields. It belongs to a tenant transaction. */
+export interface MemberQueryStore {
+  find(memberId: string, context: MemberQueryContext): Promise<MemberView | null>;
+  /** Overdue first, then by name, then by id. Rows after the cursor only. */
+  list(request: MemberPageRequest, context: MemberQueryContext): Promise<readonly MemberListRow[]>;
+}
+
+export interface MemberQueryUnit {
+  readonly members: MemberQueryStore;
+  readonly tenants: Pick<TenantStore, "find">;
 }
 
 /** The gyms a job works through. The tenants table is not tenant scoped. */

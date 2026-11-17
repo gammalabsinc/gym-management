@@ -9,6 +9,7 @@ export type Role = (typeof ROLES)[number];
  */
 export const ROLE_PERMISSIONS = {
   owner: [
+    "member.read",
     "member.create",
     "member.update",
     "member.pause",
@@ -20,7 +21,14 @@ export const ROLE_PERMISSIONS = {
     "settings.manage",
     "role.manage",
   ],
-  staff: ["member.create", "member.update", "member.pause", "payment.record", "scan.record"],
+  staff: [
+    "member.read",
+    "member.create",
+    "member.update",
+    "member.pause",
+    "payment.record",
+    "scan.record",
+  ],
   member: [],
 } as const satisfies Readonly<Record<Role, readonly string[]>>;
 
