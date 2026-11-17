@@ -13,6 +13,7 @@ import type {
   MemberUnit,
   NewMemberRow,
   NewMembershipPeriod,
+  NewReferralRow,
   StaffRecord,
 } from "./ports";
 
@@ -58,6 +59,10 @@ interface Options {
   /** The member id each user already has. */
   memberOfUser?: Record<string, string>;
   referrerExists?: boolean;
+  /** Who the member row says referred them. Left out, it is the referrer the input names. */
+  capturedReferrer?: string | null | undefined;
+  /** True when the referral already has discount rows. */
+  referralExists?: boolean;
   createUserResult?: string | null;
   /** Each insert attempt answers from this list; a null is a refused insert. */
   inserts?: (string | null)[];
@@ -71,6 +76,7 @@ function setup(options: Options = {}) {
   const created: unknown[] = [];
   const attempts: NewMemberRow[] = [];
   const periods: NewMembershipPeriod[] = [];
+  const discounts: NewReferralRow[] = [];
   const inserts = [...(options.inserts ?? [MEMBER_ID])];
   let code = 0;
   const unit: MemberUnit = {
@@ -97,6 +103,15 @@ function setup(options: Options = {}) {
       },
     },
     plans: { findByKey: async () => (options.plan === undefined ? PLAN : options.plan) },
+    referrals: {
+      referrerOf: async () =>
+        options.capturedReferrer === undefined ? REFERRER_ID : options.capturedReferrer,
+      exists: async () => options.referralExists ?? false,
+      insert: async (row) => {
+        discounts.push(row);
+        return `discount-${discounts.length}`;
+      },
+    },
     invoices: {
       lockMember: async () =>
         options.billable === undefined
@@ -131,7 +146,7 @@ function setup(options: Options = {}) {
       },
     },
   });
-  return { create, writes, audits, created, attempts, periods };
+  return { create, writes, audits, created, attempts, periods, discounts };
 }
 
 describe("creating a member", () => {
@@ -270,6 +285,52 @@ describe("creating a member", () => {
       expect(await create(INPUT, CTX)).toMatchObject({ ok: false, error: { kind: "conflict" } });
       expect(writes).toEqual([]);
     }
+  });
+
+  it("makes the referral discounts from the gym's defaults before the first invoice", async () => {
+    const settings = { ...DEFAULT_SETTINGS, referrerAmount: 1000, referredAmount: 500 };
+    const { create, discounts, audits } = setup({ tenant: { ...TENANT, settings } });
+    const result = await create({ ...INPUT, referredBy: REFERRER_ID }, CTX);
+    expect(result.ok).toBe(true);
+    expect(discounts).toEqual([
+      expect.objectContaining({
+        memberId: REFERRER_ID,
+        sourceMemberId: MEMBER_ID,
+        side: "referrer",
+        amount: 1000,
+        startsOn: "2026-11-16",
+        createdBy: ACTOR_ID,
+      }),
+      expect.objectContaining({
+        memberId: MEMBER_ID,
+        sourceMemberId: REFERRER_ID,
+        side: "referred",
+        amount: 500,
+      }),
+    ]);
+    expect(audits.map((event) => event.action)).toEqual([
+      "discount.created",
+      "discount.created",
+      "invoice.generated",
+      "member.created",
+    ]);
+  });
+
+  it("makes no discount for a member nobody referred, or when the defaults are zero", async () => {
+    const settings = { ...DEFAULT_SETTINGS, referrerAmount: 1000, referredAmount: 500 };
+    const nobody = setup({ tenant: { ...TENANT, settings } });
+    await nobody.create(INPUT, CTX);
+    expect(nobody.discounts).toEqual([]);
+    const zero = setup();
+    await zero.create({ ...INPUT, referredBy: REFERRER_ID }, CTX);
+    expect(zero.discounts).toEqual([]);
+  });
+
+  it("throws, to roll the member back, when the referral cannot be applied", async () => {
+    const { create } = setup({ referralExists: true });
+    await expect(create({ ...INPUT, referredBy: REFERRER_ID }, CTX)).rejects.toThrow(
+      "Referral failed: This referral was already applied",
+    );
   });
 
   it("is a validation error when the referrer is not a member of this gym", async () => {

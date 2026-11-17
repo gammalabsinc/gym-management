@@ -15,6 +15,7 @@ import { DEFAULT_PLAN_KEY } from "../domain/plans";
 import { ok, type Result } from "../domain/result";
 import { type GeneratedInvoice, generateInvoicesInUnit } from "./invoices";
 import type { Clock, CodeGenerator, MemberUnit, WithTenantTx } from "./ports";
+import { applyReferral } from "./referral";
 import { type PermissionContext, requirePermission } from "./require-permission";
 
 export const MEMBER_CREATED = "member.created";
@@ -98,8 +99,9 @@ async function userFor(
  * Adds a member: the person, the member number and barcode, the first active period and the first
  * invoice. The person is found by Google email, so a staff member can also join as a member, and
  * a person who already has a member row in this gym is a conflict the screen can show. The
- * member, the period, the invoices and the audit event commit together or not at all. Referral
- * discounts are created by the referral defaults ticket, on top of the referred by id stored here.
+ * member, the period, the referral discounts, the invoices and the audit event commit together or
+ * not at all. The referral discounts are made from the gym's defaults before the first invoice, so
+ * the new member's own discount lands on it.
  */
 export function makeCreateMember(deps: CreateMemberDeps) {
   return requirePermission<NewMemberInput, CreateMemberContext, CreatedMember, CreateError>(
@@ -132,6 +134,20 @@ export function makeCreateMember(deps: CreateMemberDeps) {
           validFrom: member.joinDate,
           changedBy: ctx.userId,
         });
+        // Before the first invoice, so the new member's own discount lands on it.
+        if (member.referredBy !== null) {
+          const referral = await applyReferral(unit, {
+            memberId,
+            referrerId: member.referredBy,
+            startsOn: member.joinDate,
+            settings: tenant.settings,
+            actorUserId: ctx.userId,
+            requestId: ctx.requestId,
+          });
+          // The referrer was just checked and the member just written, so a failure here is a bug.
+          // Throwing rolls the member back with it.
+          if (!referral.ok) throw new Error(`Referral failed: ${referral.error.message}`);
+        }
         const generated = await generateInvoicesInUnit(
           unit,
           deps.clock,
