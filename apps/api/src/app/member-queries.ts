@@ -9,6 +9,7 @@ import {
 } from "../domain/member-list";
 import type { MemberView } from "../domain/member-view";
 import { ok } from "../domain/result";
+import type { Tenant } from "../domain/tenant";
 import { parseUuid } from "../domain/uuid";
 import type { Clock, MemberQueryContext, MemberQueryUnit, WithTenantTx } from "./ports";
 import { type PermissionContext, requirePermission } from "./require-permission";
@@ -29,11 +30,9 @@ export interface MemberPage {
   readonly nextCursor: string | null;
 }
 
-/** Reads the gym's clock settings once, so the list and the profile derive fields the same way. */
-async function queryContext(unit: MemberQueryUnit, clock: Clock): Promise<MemberQueryContext> {
-  const tenant = await unit.tenants.find();
-  if (tenant === null) throw new Error("The gym of this transaction cannot be read");
-  const today = localDateIn(clock.now(), tenant.timezone);
+/** The gym's clock settings and month boundaries, so every derived field is read the same way. */
+export function memberQueryContext(tenant: Tenant, now: Date): MemberQueryContext {
+  const today = localDateIn(now, tenant.timezone);
   const months = monthWindows(today);
   return {
     today,
@@ -43,6 +42,13 @@ async function queryContext(unit: MemberQueryUnit, clock: Clock): Promise<Member
     thisMonthStart: months.thisStart,
     nextMonthStart: months.nextStart,
   };
+}
+
+/** Reads the gym's clock settings once, so the list and the profile derive fields the same way. */
+async function queryContext(unit: MemberQueryUnit, clock: Clock): Promise<MemberQueryContext> {
+  const tenant = await unit.tenants.find();
+  if (tenant === null) throw new Error("The gym of this transaction cannot be read");
+  return memberQueryContext(tenant, clock.now());
 }
 
 /** One member with the derived fields of the profile screen. Staff and owners only. */

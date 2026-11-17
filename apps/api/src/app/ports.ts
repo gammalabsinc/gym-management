@@ -8,7 +8,8 @@ import type { Allocation, NewPayment, PaymentMethod, UnpaidInvoice } from "../do
 import type { Role } from "../domain/permissions";
 import type { NewPlan, Plan, PlanFields } from "../domain/plans";
 import type { NewReferralDiscount } from "../domain/referral";
-import type { MembershipStatus } from "../domain/standing";
+import type { ScanSource } from "../domain/scan";
+import type { MembershipStatus, Standing } from "../domain/standing";
 import type { Tenant, TenantSettings } from "../domain/tenant";
 
 export interface Clock {
@@ -560,4 +561,46 @@ export interface ReferralStore {
   exists(memberId: string, referrerId: string): Promise<boolean>;
   /** Writes one row. Returns its id, or null when that exact referral row is already there. */
   insert(row: NewReferralRow): Promise<string | null>;
+}
+
+/** The member a barcode belongs to, with the current period the scan card reports. */
+export interface ScanMember {
+  readonly id: string;
+  readonly status: MembershipStatus;
+  /** The gym's local date the current period began, written YYYY-MM-DD. */
+  readonly statusSince: string;
+}
+
+export interface NewAttendanceRow {
+  readonly memberId: string;
+  readonly scannedAt: Date;
+  /** The scan day in the gym's time zone, written YYYY-MM-DD. */
+  readonly localDate: string;
+  readonly isDuplicate: boolean;
+  readonly statusAtScan: Standing;
+  readonly source: ScanSource;
+}
+
+/** The attendance log of one gym. It belongs to a tenant transaction, so it only ever sees that gym's rows. */
+export interface ScanStore {
+  /**
+   * The member with this barcode in this gym, locked until the transaction ends, so two scans of
+   * one member take turns. Null when no member of this gym has the code, whichever gym holds it.
+   */
+  lockByBarcode(barcode: string): Promise<ScanMember | null>;
+  /**
+   * When the member's last scan that was not a duplicate happened, as a UTC instant, provided it
+   * falls inside the window that ends at `now`. A window of zero minutes holds nothing. Null when
+   * there is no such scan.
+   */
+  originalScanWithin(memberId: string, now: Date, windowMinutes: number): Promise<string | null>;
+  /** Writes the scan and returns its id. */
+  insert(row: NewAttendanceRow): Promise<string>;
+}
+
+/** Everything recording a scan needs, all inside one tenant transaction. A scan writes no audit event. */
+export interface ScanUnit {
+  readonly scans: ScanStore;
+  readonly members: Pick<MemberQueryStore, "find">;
+  readonly tenants: Pick<TenantStore, "find">;
 }
