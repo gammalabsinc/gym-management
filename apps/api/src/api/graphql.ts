@@ -20,7 +20,7 @@ import { makeResolvers } from "./resolvers";
 export const GRAPHQL_PATH = "/graphql";
 
 export interface GraphqlDeps {
-  readonly buildContext: (request: Request) => GraphQLContext;
+  readonly buildContext: (request: Request) => Promise<GraphQLContext>;
   /** Introspection is refused when this is true. */
   readonly production?: boolean;
   readonly limits?: QueryLimits;

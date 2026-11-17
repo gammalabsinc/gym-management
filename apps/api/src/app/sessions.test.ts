@@ -7,10 +7,10 @@ const START = new Date("2026-01-10T12:00:00Z");
 const HOUR = 3_600_000;
 
 function fakeStore() {
-  const rows = new Map<string, NewSession & { revokedAt: Date | null }>();
+  const rows = new Map<string, NewSession & { revokedAt: Date | null; gymId: string | null }>();
   const store: SessionStore = {
     async insert(session) {
-      rows.set(session.tokenHash, { ...session, revokedAt: null });
+      rows.set(session.tokenHash, { ...session, revokedAt: null, gymId: null });
     },
     async findByTokenHash(tokenHash): Promise<StoredSession | null> {
       const row = rows.get(tokenHash);
@@ -20,6 +20,7 @@ function fakeStore() {
         subject: row.subject,
         expiresAt: row.expiresAt,
         revokedAt: row.revokedAt,
+        gymId: row.gymId,
       };
     },
     async revokeByTokenHash(tokenHash, at) {
@@ -35,6 +36,11 @@ function fakeStore() {
         }
       }
       return count;
+    },
+    async bindGym(sessionId, gymId) {
+      for (const row of rows.values()) {
+        if (row.id === sessionId && row.revokedAt === null) row.gymId = gymId;
+      }
     },
   };
   return { store, rows };
@@ -96,7 +102,10 @@ describe("makeSessions", () => {
       const { sessions } = setup();
       const { token } = await sessions.issue("sub-1");
       const result = await sessions.authenticate(token);
-      expect(result).toEqual({ ok: true, value: { sessionId: "id-1", subject: "sub-1" } });
+      expect(result).toEqual({
+        ok: true,
+        value: { sessionId: "id-1", subject: "sub-1", gymId: null },
+      });
     });
 
     it("rejects the stored hash used as a token, so a database dump is useless", async () => {

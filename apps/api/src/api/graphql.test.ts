@@ -19,7 +19,7 @@ function post(query: string) {
 
 describe("makeGraphqlHandler", () => {
   it("serves the health query", async () => {
-    const yoga = makeGraphqlHandler({ buildContext: () => context });
+    const yoga = makeGraphqlHandler({ buildContext: async () => context });
     const response = await yoga.fetch(post("{ health }"));
     expect(await response.json()).toEqual({ data: { health: "ok" } });
   });
@@ -27,7 +27,7 @@ describe("makeGraphqlHandler", () => {
   it("builds the context from the request", async () => {
     const seen: string[] = [];
     const yoga = makeGraphqlHandler({
-      buildContext: (request) => {
+      buildContext: async (request) => {
         seen.push(request.url);
         return context;
       },
@@ -37,14 +37,14 @@ describe("makeGraphqlHandler", () => {
   });
 
   it("rejects a query that is not in the schema", async () => {
-    const yoga = makeGraphqlHandler({ buildContext: () => context });
+    const yoga = makeGraphqlHandler({ buildContext: async () => context });
     const response = await yoga.fetch(post("{ nope }"));
     const body = (await response.json()) as { errors?: unknown[] };
     expect(body.errors).toHaveLength(1);
   });
 
   it("does not serve the GraphiQL page", async () => {
-    const yoga = makeGraphqlHandler({ buildContext: () => context });
+    const yoga = makeGraphqlHandler({ buildContext: async () => context });
     const response = await yoga.fetch(
       new Request("http://localhost/graphql", { headers: { accept: "text/html" } }),
     );
@@ -64,19 +64,19 @@ async function bodyOf(response: Response) {
 
 describe("hardening", () => {
   it("rejects a deeply nested query before it runs", async () => {
-    const yoga = makeGraphqlHandler({ buildContext: () => context });
+    const yoga = makeGraphqlHandler({ buildContext: async () => context });
     const body = await bodyOf(await yoga.fetch(post(nested(30))));
     expect(body.errors?.[0]?.extensions?.code).toBe("QUERY_TOO_DEEP");
   });
 
   it("allows introspection outside production", async () => {
-    const yoga = makeGraphqlHandler({ buildContext: () => context });
+    const yoga = makeGraphqlHandler({ buildContext: async () => context });
     const body = await bodyOf(await yoga.fetch(post("{ __schema { queryType { name } } }")));
     expect(body.data).toEqual({ __schema: { queryType: { name: "Query" } } });
   });
 
   it("refuses introspection in production", async () => {
-    const yoga = makeGraphqlHandler({ buildContext: () => context, production: true });
+    const yoga = makeGraphqlHandler({ buildContext: async () => context, production: true });
     const body = await bodyOf(await yoga.fetch(post("{ __schema { queryType { name } } }")));
     expect(body.errors?.[0]?.extensions?.code).toBe("INTROSPECTION_DISABLED");
   });
@@ -87,7 +87,7 @@ describe("hardening", () => {
       policy: { limit: 2, windowMs: 60_000 },
     });
     const yoga = makeGraphqlHandler({
-      buildContext: () => context,
+      buildContext: async () => context,
       rateLimits: { health: limiter },
     });
     const from = (address: string) =>
@@ -107,7 +107,7 @@ describe("hardening", () => {
       policy: { limit: 1, windowMs: 60_000 },
     });
     const yoga = makeGraphqlHandler({
-      buildContext: () => context,
+      buildContext: async () => context,
       rateLimits: { other: limiter },
     });
     expect((await bodyOf(await yoga.fetch(post("{ health }")))).data).toEqual({ health: "ok" });

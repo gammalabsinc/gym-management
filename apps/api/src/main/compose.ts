@@ -16,7 +16,7 @@ export interface ComposeDeps {
 }
 
 /** Nobody can sign in yet, so every request is anonymous. The session ticket replaces this. */
-const anonymousSessions: SessionResolver = () => null;
+const anonymousSessions: SessionResolver = async () => null;
 
 /** Composition root: the only place that calls factories with real adapters. */
 export function composeApp(deps: ComposeDeps) {
