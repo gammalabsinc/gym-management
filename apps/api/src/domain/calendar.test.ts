@@ -7,6 +7,8 @@ import {
   isLeapYear,
   localDateIn,
   nextDate,
+  previousDate,
+  subtractDays,
 } from "./calendar";
 
 describe("isLeapYear", () => {
@@ -118,6 +120,39 @@ describe("addDays", () => {
     expect(addDays("2026-11-28", 5)).toBe("2026-12-03");
     expect(addDays("2026-12-30", 3)).toBe("2027-01-02");
     expect(addDays("2028-02-27", 3)).toBe("2028-03-01");
+  });
+});
+
+describe("previousDate", () => {
+  it("moves back one day inside a month", () => {
+    expect(previousDate("2026-11-15")).toBe("2026-11-14");
+  });
+
+  it("crosses a month and a year, and knows the length of February", () => {
+    expect(previousDate("2026-12-01")).toBe("2026-11-30");
+    expect(previousDate("2026-03-01")).toBe("2026-02-28");
+    expect(previousDate("2024-03-01")).toBe("2024-02-29");
+    expect(previousDate("2027-01-01")).toBe("2026-12-31");
+  });
+
+  it("undoes nextDate", () => {
+    for (const date of ["2026-11-30", "2026-12-31", "2024-02-28", "2024-02-29"]) {
+      expect(previousDate(nextDate(date))).toBe(date);
+    }
+  });
+});
+
+describe("subtractDays", () => {
+  it("returns the same day for zero and walks back across months and years", () => {
+    expect(subtractDays("2026-11-16", 0)).toBe("2026-11-16");
+    expect(subtractDays("2026-11-16", 5)).toBe("2026-11-11");
+    expect(subtractDays("2026-12-03", 5)).toBe("2026-11-28");
+    expect(subtractDays("2027-01-02", 3)).toBe("2026-12-30");
+    expect(subtractDays("2028-03-01", 3)).toBe("2028-02-27");
+  });
+
+  it("undoes addDays", () => {
+    expect(subtractDays(addDays("2026-11-16", 40), 40)).toBe("2026-11-16");
   });
 });
 

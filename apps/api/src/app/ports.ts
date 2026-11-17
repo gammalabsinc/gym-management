@@ -472,3 +472,26 @@ export interface MemberRoster {
 export interface TopUpUnit extends InvoiceUnit {
   readonly roster: MemberRoster;
 }
+
+/** A payment the dev seed writes straight away, until the record payment use case exists. */
+export interface SeedPaymentRow {
+  readonly memberId: string;
+  readonly invoiceId: string;
+  /** Minor units, the whole invoice. */
+  readonly amount: number;
+  /** The gym's local date the payment was made. */
+  readonly paidOn: string;
+  readonly recordedBy: string;
+  readonly clientRequestId: string;
+}
+
+/** The payments of one gym. It belongs to a tenant transaction. */
+export interface SeedPaymentStore {
+  /** Writes the payment and the allocation that settles the invoice. Returns the payment id. */
+  insertPaid(row: SeedPaymentRow): Promise<string>;
+}
+
+export interface SeedPaymentUnit {
+  readonly payments: SeedPaymentStore;
+  readonly audit: AuditLog;
+}

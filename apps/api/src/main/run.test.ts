@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TopUpSummary } from "../app/invoice-top-up";
 import type { OnboardedGym } from "../app/onboarding";
+import type { SeededGym } from "../app/seed-dev-data";
 import type { ValidationError } from "../domain/errors";
 import { validationError } from "../domain/errors";
 import type { OnboardGymInput } from "../domain/onboarding";
@@ -27,6 +28,12 @@ function makeDeps(env: Record<string, string | undefined>) {
     async (_url: string, _input: OnboardGymInput): Promise<Result<OnboardedGym, ValidationError>> =>
       ok({ tenantId: "tenant-1", subdomain: "iron-works", created: true }),
   );
+  const seed = vi.fn(
+    async (_url: string): Promise<readonly SeededGym[]> => [
+      { subdomain: "ironworks", tenantId: "tenant-1", created: true, members: 6 },
+      { subdomain: "pulsefit", tenantId: "tenant-2", created: false, members: 0 },
+    ],
+  );
   const worker = vi.fn(
     async (_url: string, _logger: unknown): Promise<TopUpSummary> => ({
       tenants: 2,
@@ -49,6 +56,7 @@ function makeDeps(env: Record<string, string | undefined>) {
       migrate,
       provision,
       onboard,
+      seed,
       worker,
       connect,
       onSignal,
@@ -62,6 +70,7 @@ function makeDeps(env: Record<string, string | undefined>) {
     migrate,
     provision,
     onboard,
+    seed,
     worker,
   };
 }
@@ -316,6 +325,38 @@ describe("run in onboard mode", () => {
   it("lets a failed onboarding reject so the process exits non zero", async () => {
     const { deps, onboard } = makeDeps({ DATABASE_URL, MODE: "onboard", ...gymEnv });
     onboard.mockRejectedValueOnce(new Error("connection refused"));
+    await expect(run(deps)).rejects.toThrow("connection refused");
+  });
+});
+
+describe("run in seed mode", () => {
+  it("seeds with the app role url and reports each gym", async () => {
+    const { deps, seed, lines, exit } = makeDeps({ DATABASE_URL, MODE: "seed" });
+    expect(await run(deps)).toBeNull();
+    expect(seed).toHaveBeenCalledWith(DATABASE_URL);
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      { msg: "gym seeded", subdomain: "ironworks", tenantId: "tenant-1", members: 6 },
+      { msg: "gym already seeded", subdomain: "pulsefit", tenantId: "tenant-2", members: 0 },
+    ]);
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it("refuses to run when NODE_ENV is production and touches nothing", async () => {
+    const { deps, seed, writeError, exit, connect } = makeDeps({
+      DATABASE_URL,
+      MODE: "seed",
+      NODE_ENV: "production",
+    });
+    await expect(run(deps)).rejects.toThrow("exit 1");
+    expect(writeError).toHaveBeenCalledWith("The dev seed never runs when NODE_ENV is production");
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(seed).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it("lets a failed seed reject so the process exits non zero", async () => {
+    const { deps, seed } = makeDeps({ DATABASE_URL, MODE: "seed" });
+    seed.mockRejectedValueOnce(new Error("connection refused"));
     await expect(run(deps)).rejects.toThrow("connection refused");
   });
 });

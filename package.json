@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r --if-present run typecheck",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "check": "pnpm run lint && pnpm run typecheck && pnpm run test:coverage"
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test:coverage",
+    "seed": "pnpm --filter @gym/api run seed"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.7",

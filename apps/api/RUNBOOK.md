@@ -8,6 +8,8 @@
 - `provision` creates the `gym_migrator` and `gym_app` roles and sets their passwords from `MIGRATOR_ROLE_PASSWORD` and `APP_ROLE_PASSWORD` (16 characters or more). It needs an administrator `DATABASE_URL`. It is safe to rerun, a rerun sets the same or new passwords.
 - `onboard` adds one gym and exits. `DATABASE_URL` is the `gym_app` role. It is safe to rerun: if the subdomain already exists it changes nothing and logs `gym already exists`.
 
+- `seed` fills a local database with the dev dataset and exits. It refuses to run, and writes nothing, when `NODE_ENV` is `production`. `DATABASE_URL` is the `gym_app` role.
+
 ## Setting up a new database
 
 1. Run `provision` once with an administrator `DATABASE_URL` and the two role passwords.
@@ -21,3 +23,11 @@ After step 1 the administrator url should not stay in the API service variables.
 Run `MODE=onboard node dist/index.js` with these variables. Required: `GYM_NAME`, `GYM_SUBDOMAIN` (lower case letters, digits and hyphens), `GYM_TIMEZONE` (an IANA name such as `America/Toronto`), `GYM_CURRENCY` (three capital letters) and `OWNER_EMAIL`. Optional: `OWNER_NAME`, `ADMISSION_FEE` and `MONTHLY_FEE` in minor units, both defaulting to 0.
 
 One transaction creates the gym with default settings, the owner user with the owner role, the default plan and the audit events, so a failure leaves nothing behind. Invalid input prints every problem and exits non zero without touching the database. The owner signs in later with the Google account that matches `OWNER_EMAIL`.
+
+## Seeding a local database
+
+Never against a real gym. Migrate a local database first, then run `DATABASE_URL=<gym_app url> pnpm seed` from the repo root. It builds the API and runs `MODE=seed`.
+
+The dataset is two gyms, Iron Works (`ironworks`, Toronto) and Pulse Fitness (`pulsefit`, Vancouver). Each has an owner, a staff member and members in every standing: paid, due soon, overdue, paused and cancelled. The people are `owner@<subdomain>.test`, `staff@<subdomain>.test` and one address per member, listed in `apps/api/src/domain/seed-data.ts`. Join dates are days before today, so the standings hold whenever the seed runs.
+
+Everything goes through the real use cases. Paid members get their first invoice settled by a payment dated today. Running it again changes nothing: a gym that already exists is skipped and reported as `gym already seeded`. If a run stops half way, drop the local database and run it again, because the half made gym counts as existing.
