@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateOldestFirst,
+  applyAllocations,
+  type LedgerInvoice,
   MAX_PAYMENT_AMOUNT,
   MAX_PROOF_LINK_LENGTH,
+  paidThroughOf,
+  parsePreviewPayment,
   parseRecordPayment,
   type RecordPaymentInput,
+  suggestedAmountOf,
+  unpaidOf,
 } from "./payment";
 
 const TODAY = "2026-11-16";
@@ -153,5 +159,113 @@ describe("allocateOldestFirst", () => {
       expect(allocated + result.remainder).toBe(amount);
       expect(result.allocations.every((a) => a.amount > 0)).toBe(true);
     }
+  });
+});
+
+describe("parsePreviewPayment", () => {
+  it("takes a member and an amount", () => {
+    expect(parsePreviewPayment({ memberId: ` ${MEMBER_ID.toUpperCase()} `, amount: 7000 })).toEqual(
+      {
+        ok: true,
+        value: { memberId: MEMBER_ID, amount: 7000 },
+      },
+    );
+  });
+
+  it("leaves the amount empty when none was given", () => {
+    for (const amount of [undefined, null]) {
+      expect(parsePreviewPayment({ memberId: MEMBER_ID, amount })).toEqual({
+        ok: true,
+        value: { memberId: MEMBER_ID, amount: null },
+      });
+    }
+  });
+
+  it("refuses an amount with decimals, which is more than two places of the currency", () => {
+    for (const amount of [12.5, 0.001, 1999.999]) {
+      const parsed = parsePreviewPayment({ memberId: MEMBER_ID, amount });
+      expect(parsed.ok).toBe(false);
+    }
+  });
+
+  it("refuses an amount of zero or less, or above the limit, like a payment does", () => {
+    for (const amount of [0, -1, MAX_PAYMENT_AMOUNT + 1]) {
+      expect(parsePreviewPayment({ memberId: MEMBER_ID, amount }).ok).toBe(false);
+    }
+    expect(parsePreviewPayment({ memberId: MEMBER_ID, amount: MAX_PAYMENT_AMOUNT }).ok).toBe(true);
+  });
+
+  it("refuses a bad member id and reports every problem", () => {
+    const parsed = parsePreviewPayment({ memberId: "nope", amount: 0 });
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok)
+      expect(parsed.error.issues.map((i) => i.path[0])).toEqual(["memberId", "amount"]);
+  });
+});
+
+const invoice = (id: string, start: string, end: string, due: number): LedgerInvoice => ({
+  invoiceId: id,
+  periodStart: start,
+  periodEnd: end,
+  dueDate: start,
+  amountDue: due,
+});
+
+const OCT = invoice("oct", "2026-10-10", "2026-11-09", 0);
+const NOV = invoice("nov", "2026-11-10", "2026-12-09", 5000);
+const DEC = invoice("dec", "2026-12-10", "2027-01-09", 5000);
+
+describe("the ledger helpers", () => {
+  it("lists unpaid invoices oldest cycle first and skips paid ones", () => {
+    expect(unpaidOf([DEC, OCT, NOV])).toEqual([
+      { invoiceId: "nov", amountDue: 5000 },
+      { invoiceId: "dec", amountDue: 5000 },
+    ]);
+  });
+
+  it("breaks a tie between two cycles that start the same day by id", () => {
+    const a = invoice("a", "2026-11-10", "2026-12-09", 100);
+    const b = invoice("b", "2026-11-10", "2026-12-09", 100);
+    expect(unpaidOf([b, a]).map((i) => i.invoiceId)).toEqual(["a", "b"]);
+  });
+
+  it("applies allocations to the invoices they name and never goes below zero", () => {
+    const after = applyAllocations([NOV, DEC], [{ invoiceId: "nov", amount: 6000 }]);
+    expect(after.map((i) => i.amountDue)).toEqual([0, 5000]);
+    expect(applyAllocations([NOV], [{ invoiceId: "nov", amount: 2000 }])[0]?.amountDue).toBe(3000);
+  });
+
+  it("says paid through is the end of the last paid cycle before the oldest unpaid one", () => {
+    expect(paidThroughOf([OCT, NOV, DEC])).toBe("2026-11-09");
+  });
+
+  it("does not count a paid cycle that comes after an unpaid one", () => {
+    expect(paidThroughOf([OCT, NOV, { ...DEC, amountDue: 0 }])).toBe("2026-11-09");
+    expect(paidThroughOf([NOV, { ...DEC, amountDue: 0 }])).toBeNull();
+  });
+
+  it("goes to the last cycle when everything is paid, and is null with no invoices or no payment", () => {
+    expect(paidThroughOf([OCT, { ...NOV, amountDue: 0 }])).toBe("2026-12-09");
+    expect(paidThroughOf([])).toBeNull();
+    expect(paidThroughOf([NOV])).toBeNull();
+  });
+
+  it("suggests what is owed on invoices due by today", () => {
+    expect(suggestedAmountOf([OCT, NOV, DEC], "2026-11-16")).toBe(5000);
+    expect(suggestedAmountOf([{ ...OCT, amountDue: 700 }, NOV], "2026-11-16")).toBe(5700);
+  });
+
+  it("suggests the oldest open invoice when nothing is due yet", () => {
+    expect(
+      suggestedAmountOf(
+        [OCT, { ...DEC, amountDue: 4200 }, invoice("jan", "2027-01-10", "2027-02-09", 5000)],
+        "2026-11-16",
+      ),
+    ).toBe(4200);
+  });
+
+  it("suggests nothing when every invoice is paid", () => {
+    expect(suggestedAmountOf([OCT], "2026-11-16")).toBeNull();
+    expect(suggestedAmountOf([], "2026-11-16")).toBeNull();
   });
 });

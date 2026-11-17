@@ -80,6 +80,36 @@ export function makePaymentStore(executor: SqlExecutor, tenantId: string): Payme
       return found.map((row) => ({ invoiceId: row.id, amountDue: Number(row.amount_due) }));
     },
 
+    async ledger(memberId) {
+      const found = await rows<{
+        id: string;
+        period_start: string;
+        period_end: string;
+        due_date: string;
+        amount_due: number;
+      }>(
+        `SELECT i.id,
+                to_char(i.period_start, ${DATE}) AS period_start,
+                to_char(i.period_end, ${DATE}) AS period_end,
+                to_char(i.due_date, ${DATE}) AS due_date,
+                i.total - COALESCE(SUM(a.amount) FILTER (WHERE NOT p.is_void), 0) AS amount_due
+           FROM invoices i
+           LEFT JOIN payment_allocations a ON a.tenant_id = i.tenant_id AND a.invoice_id = i.id
+           LEFT JOIN payments p ON p.tenant_id = a.tenant_id AND p.id = a.payment_id
+          WHERE i.tenant_id = $1 AND i.member_id = $2 AND NOT i.is_void
+          GROUP BY i.id
+          ORDER BY i.period_start, i.id`,
+        [tenantId, memberId],
+      );
+      return found.map((row) => ({
+        invoiceId: row.id,
+        periodStart: row.period_start,
+        periodEnd: row.period_end,
+        dueDate: row.due_date,
+        amountDue: Number(row.amount_due),
+      }));
+    },
+
     async insert(row) {
       const [created] = await rows<{ id: string; submitted_at: string }>(
         `INSERT INTO payments

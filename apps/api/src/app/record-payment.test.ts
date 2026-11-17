@@ -72,6 +72,7 @@ function setup(world: World = {}) {
     payments: {
       findByRequestId: async () => null,
       unpaidInvoices: async () => [],
+      ledger: async () => [],
       insert: async () => ({ id: "payment-1", submittedAt: "2026-11-16T15:00:00.000000Z" }),
       insertAllocations: async (paymentId, allocations) => {
         allocated.push({ paymentId, invoiceIds: allocations.map((a) => a.invoiceId) });
