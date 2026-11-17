@@ -107,7 +107,7 @@ async function scanAt(g: Gym, barcode: string, at: string): Promise<void> {
     withUnit: (t, fn) => withScan(t, fn),
     clock: { now: () => new Date(at) },
   });
-  const result = await scan({ barcode }, g.staff);
+  const result = await scan({ barcode }, g.creator);
   if (!result.ok || !result.value.found) throw new Error("expected the scan to be stored");
 }
 

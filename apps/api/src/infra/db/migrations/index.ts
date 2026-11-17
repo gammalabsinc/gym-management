@@ -6,6 +6,7 @@ import { Sessions1700000004000 } from "./1700000004000-sessions";
 import { BusinessTables1700000005000 } from "./1700000005000-business-tables";
 import { AccountClaimPolicies1700000006000 } from "./1700000006000-account-claim-policies";
 import { SessionGym1700000007000 } from "./1700000007000-session-gym";
+import { AttendanceRecordedBy1700000008000 } from "./1700000008000-attendance-recorded-by";
 
 /** Listed in run order. Classes, not a glob, so the bundled server finds them. */
 export const MIGRATIONS = [
@@ -17,4 +18,5 @@ export const MIGRATIONS = [
   BusinessTables1700000005000,
   AccountClaimPolicies1700000006000,
   SessionGym1700000007000,
+  AttendanceRecordedBy1700000008000,
 ];

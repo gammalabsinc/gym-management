@@ -636,6 +636,8 @@ export interface NewAttendanceRow {
   readonly isDuplicate: boolean;
   readonly statusAtScan: Standing;
   readonly source: ScanSource;
+  /** The staff user who made the check in. */
+  readonly recordedBy: string;
 }
 
 /** The attendance log of one gym. It belongs to a tenant transaction, so it only ever sees that gym's rows. */
@@ -645,6 +647,8 @@ export interface ScanStore {
    * one member take turns. Null when no member of this gym has the code, whichever gym holds it.
    */
   lockByBarcode(barcode: string): Promise<ScanMember | null>;
+  /** The member with this id in this gym, locked the same way. Null when this gym has no such member. */
+  lockById(memberId: string): Promise<ScanMember | null>;
   /**
    * When the member's last scan that was not a duplicate happened, as a UTC instant, provided it
    * falls inside the window that ends at `now`. A window of zero minutes holds nothing. Null when
