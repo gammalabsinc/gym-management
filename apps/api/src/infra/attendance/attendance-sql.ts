@@ -18,22 +18,27 @@ interface MemberRow {
  * must run inside the tenant transaction, so the member lock lasts until the scan is written.
  */
 export function makeScanStore(executor: SqlExecutor, tenantId: string): ScanStore {
+  /** `column` is one of two constants of this file, never client input. The value is a parameter. */
+  async function lockMember(column: "m.barcode" | "m.id", value: string) {
+    const rows = (await executor.query(
+      `SELECT m.id, p.status, to_char(p.valid_from, ${DATE}) AS status_since
+         FROM members m
+         JOIN membership_periods p
+           ON p.tenant_id = m.tenant_id AND p.member_id = m.id AND p.valid_to IS NULL
+        WHERE m.tenant_id = $1 AND ${column} = $2
+          FOR UPDATE OF m`,
+      [tenantId, value],
+    )) as MemberRow[];
+    const [row] = rows;
+    return row === undefined
+      ? null
+      : { id: row.id, status: row.status, statusSince: row.status_since };
+  }
+
   return {
-    async lockByBarcode(barcode) {
-      const rows = (await executor.query(
-        `SELECT m.id, p.status, to_char(p.valid_from, ${DATE}) AS status_since
-           FROM members m
-           JOIN membership_periods p
-             ON p.tenant_id = m.tenant_id AND p.member_id = m.id AND p.valid_to IS NULL
-          WHERE m.tenant_id = $1 AND m.barcode = $2
-            FOR UPDATE OF m`,
-        [tenantId, barcode],
-      )) as MemberRow[];
-      const [row] = rows;
-      return row === undefined
-        ? null
-        : { id: row.id, status: row.status, statusSince: row.status_since };
-    },
+    lockByBarcode: (barcode) => lockMember("m.barcode", barcode),
+
+    lockById: (memberId) => lockMember("m.id", memberId),
 
     async originalScanWithin(memberId, now, windowMinutes) {
       const rows = (await executor.query(
@@ -51,8 +56,9 @@ export function makeScanStore(executor: SqlExecutor, tenantId: string): ScanStor
     async insert(row) {
       const rows = (await executor.query(
         `INSERT INTO attendance
-           (tenant_id, member_id, scanned_at, local_date, is_duplicate, status_at_scan, source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (tenant_id, member_id, scanned_at, local_date, is_duplicate, status_at_scan, source,
+            recorded_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id`,
         [
           tenantId,
@@ -62,6 +68,7 @@ export function makeScanStore(executor: SqlExecutor, tenantId: string): ScanStor
           row.isDuplicate,
           row.statusAtScan,
           row.source,
+          row.recordedBy,
         ],
       )) as { id: string }[];
       const [created] = rows;

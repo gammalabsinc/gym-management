@@ -11,7 +11,7 @@ import type {
   WithTenantTx,
 } from "../../app/ports";
 import { makeRecordPayment } from "../../app/record-payment";
-import { makeRecordScan, type RecordScanContext } from "../../app/record-scan";
+import { makeCheckInMember, makeRecordScan, type RecordScanContext } from "../../app/record-scan";
 import { dataSourceOptions } from "../db/data-source";
 import { migrateDatabase } from "../db/migrate";
 import { APP_ROLE, MIGRATOR_ROLE, provisionRoles } from "../db/roles";
@@ -91,7 +91,7 @@ async function gym(): Promise<Gym> {
     [tenantId],
   );
   return {
-    ctx: { roles: ["staff"], tenantId },
+    ctx: { roles: ["staff"], tenantId, userId },
     staff: { roles: ["staff"], tenantId, userId, requestId: `req-${counter}` },
   };
 }
@@ -126,6 +126,20 @@ function scanner(now: Date = NOW) {
 }
 
 const scan = scanner();
+
+function checkInBy(now: Date = NOW) {
+  return makeCheckInMember({ withUnit: (t, fn) => withScan(t, fn), clock: { now: () => now } });
+}
+
+const checkIn = checkInBy();
+
+async function recordedByOf(memberId: string): Promise<(string | null)[]> {
+  const { rows } = await db.admin.query(
+    "SELECT recorded_by FROM attendance WHERE member_id = $1 ORDER BY created_at, id",
+    [memberId],
+  );
+  return (rows as { recorded_by: string | null }[]).map((row) => row.recorded_by);
+}
 
 async function attendanceOf(memberId: string) {
   const { rows } = await db.admin.query(
@@ -310,5 +324,115 @@ describe("recording a scan against Postgres", () => {
       [g.ctx.tenantId],
     );
     expect(after).toEqual(before);
+  });
+});
+
+describe("recording who made a check in", () => {
+  it("stores the staff user on a barcode scan", async () => {
+    const g = await gym();
+    const m = await member(g);
+    await scan({ barcode: m.barcode }, g.ctx);
+    expect(await recordedByOf(m.memberId)).toEqual([g.ctx.userId]);
+  });
+
+  it("refuses a user of another gym at the database", async () => {
+    const g = await gym();
+    const other = await gym();
+    const m = await member(g);
+    await expect(
+      db.admin.query(
+        `INSERT INTO attendance (tenant_id, member_id, scanned_at, local_date, is_duplicate, status_at_scan, source, recorded_by)
+         VALUES ($1, $2, now(), '2026-11-16', false, 'paid', 'manual', $3)`,
+        [g.ctx.tenantId, m.memberId, other.ctx.userId],
+      ),
+    ).rejects.toThrow(/attendance_recorded_by_fkey/);
+  });
+});
+
+describe("checking a member in by id against Postgres", () => {
+  it("stores a manual visit with the staff user and returns the same card as a scan", async () => {
+    const g = await gym();
+    const m = await member(g);
+    await payFirstInvoice(g, m.memberId);
+    const result = await checkIn({ memberId: m.memberId }, g.ctx);
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        found: true,
+        visit: { memberId: m.memberId, isDuplicate: false, source: "manual", statusAtScan: "paid" },
+        member: { id: m.memberId, name: "Ada Lovelace", standing: "paid", status: "active" },
+        firstCheckInAt: null,
+      },
+    });
+    expect(await attendanceOf(m.memberId)).toEqual([
+      {
+        is_duplicate: false,
+        status_at_scan: "paid",
+        source: "manual",
+        local_date: "2026-11-16",
+      },
+    ]);
+    expect(await recordedByOf(m.memberId)).toEqual([g.ctx.userId]);
+  });
+
+  it("never rejects an overdue member", async () => {
+    const g = await gym();
+    const m = await member(g);
+    const result = await checkIn({ memberId: m.memberId }, g.ctx);
+    expect(result.ok && result.value.visit.statusAtScan).toBe("overdue");
+  });
+
+  it("shares the repeat window with barcode scans in both directions", async () => {
+    const g = await gym();
+    const m = await member(g);
+    await scan({ barcode: m.barcode }, g.ctx);
+    const repeat = await checkInBy(new Date(NOW.getTime() + 2 * 60_000))(
+      { memberId: m.memberId },
+      g.ctx,
+    );
+    expect(repeat.ok && repeat.value.visit.isDuplicate).toBe(true);
+    expect(repeat.ok && repeat.value.firstCheckInAt).not.toBeNull();
+
+    const second = await member(g);
+    await checkIn({ memberId: second.memberId }, g.ctx);
+    const scanned = await scanner(new Date(NOW.getTime() + 2 * 60_000))(
+      { barcode: second.barcode },
+      g.ctx,
+    );
+    expect(scanned.ok && scanned.value.found && scanned.value.visit.isDuplicate).toBe(true);
+  });
+
+  it("makes exactly one of a scan and a check in at the same instant the original", async () => {
+    const g = await gym();
+    const m = await member(g);
+    await Promise.all([
+      scan({ barcode: m.barcode }, g.ctx),
+      checkIn({ memberId: m.memberId }, g.ctx),
+      scan({ barcode: m.barcode }, g.ctx),
+      checkIn({ memberId: m.memberId }, g.ctx),
+    ]);
+    const rows = await attendanceOf(m.memberId);
+    expect(rows).toHaveLength(4);
+    expect(rows.filter((row) => !row.is_duplicate)).toHaveLength(1);
+  });
+
+  it("says not found for a member of another gym, exactly like an unknown id, and writes nothing", async () => {
+    const g = await gym();
+    const other = await gym();
+    const theirs = await member(other);
+    const before = await attendanceCount();
+    const foreign = await checkIn({ memberId: theirs.memberId }, g.ctx);
+    const unknown = await checkIn({ memberId: randomUUID() }, g.ctx);
+    expect(foreign).toMatchObject({ ok: false, error: { kind: "not_found" } });
+    expect(unknown).toEqual(foreign);
+    expect(await attendanceCount()).toBe(before);
+  });
+
+  it("is for staff and owners only", async () => {
+    const g = await gym();
+    const m = await member(g);
+    const result = await checkIn({ memberId: m.memberId }, { ...g.ctx, roles: ["member"] });
+    expect(result).toMatchObject({ ok: false, error: { kind: "forbidden" } });
+    expect(await attendanceOf(m.memberId)).toEqual([]);
   });
 });

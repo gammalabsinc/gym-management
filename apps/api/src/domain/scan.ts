@@ -1,5 +1,6 @@
 import { type FieldIssue, type ValidationError, validationError } from "./errors";
 import { ok, type Result } from "./result";
+import { parseUuid } from "./uuid";
 
 export const SCAN_SOURCES = ["staff_app", "manual"] as const;
 export type ScanSource = (typeof SCAN_SOURCES)[number];
@@ -47,4 +48,17 @@ export function parseRecordScan(input: RecordScanInput): Result<NewScan, Validat
   return issues.length === 0 && isScanSource(source)
     ? ok({ barcode, source })
     : validationError("Invalid scan", issues);
+}
+
+/** What the check in by search sends: the member the front desk picked from the list. */
+export interface CheckInInput {
+  readonly memberId: string;
+}
+
+/** Checks the member id at the boundary. The source of such a check in is always manual. */
+export function parseCheckIn(input: CheckInInput): Result<{ memberId: string }, ValidationError> {
+  const memberId = parseUuid(input.memberId, "memberId");
+  return memberId.ok
+    ? ok({ memberId: memberId.value })
+    : validationError("Invalid check in", memberId.error.issues);
 }

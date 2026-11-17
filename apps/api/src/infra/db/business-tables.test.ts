@@ -854,7 +854,8 @@ describe("the migration", () => {
     const source = makeDataSource(db.urlFor(MIGRATOR_ROLE, PASSWORDS.migratorPassword));
     await source.initialize();
     try {
-      // Newest first: the session gym, the account claim policies, then the business tables.
+      // Newest first: the attendance recorded by column, the session gym, the account claim policies, then the business tables.
+      await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });
       await source.undoLastMigration({ transaction: "each" });

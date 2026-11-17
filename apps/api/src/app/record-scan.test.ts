@@ -3,7 +3,12 @@ import type { MemberView } from "../domain/member-view";
 import type { Standing } from "../domain/standing";
 import { brandingFromJson, DEFAULT_SETTINGS, type Tenant } from "../domain/tenant";
 import type { NewAttendanceRow, ScanMember, ScanUnit } from "./ports";
-import { makeRecordScan, type RecordScanContext } from "./record-scan";
+import {
+  makeCheckInMember,
+  makeRecordScan,
+  type RecordScanContext,
+  type RecordScanDeps,
+} from "./record-scan";
 
 const MEMBER_ID = "11111111-1111-4111-8111-111111111111";
 const TENANT_ID = "22222222-2222-4222-8222-222222222222";
@@ -12,7 +17,8 @@ const NOW = new Date("2026-11-16T12:12:00.000Z");
 const CLOCK = { now: () => NOW };
 const FIRST = "2026-11-16T12:05:00.000000Z";
 
-const CTX: RecordScanContext = { roles: ["staff"], tenantId: TENANT_ID };
+const USER_ID = "44444444-4444-4444-8444-444444444444";
+const CTX: RecordScanContext = { roles: ["staff"], tenantId: TENANT_ID, userId: USER_ID };
 
 const TENANT: Tenant = {
   id: TENANT_ID,
@@ -70,11 +76,16 @@ function setup(world: World = {}) {
   const inserted: NewAttendanceRow[] = [];
   const windows: { now: Date; windowMinutes: number }[] = [];
   const locked: string[] = [];
+  const found = () => (world.member === undefined ? ACTIVE : world.member);
   const unit: ScanUnit = {
     scans: {
       lockByBarcode: async (barcode) => {
         locked.push(barcode);
-        return world.member === undefined ? ACTIVE : world.member;
+        return found();
+      },
+      lockById: async (memberId) => {
+        locked.push(memberId);
+        return found();
       },
       originalScanWithin: async (_memberId, now, windowMinutes) => {
         windows.push({ now, windowMinutes });
@@ -88,8 +99,10 @@ function setup(world: World = {}) {
     members: { find: async () => (world.view === undefined ? view() : world.view) },
     tenants: { find: async () => (world.tenant === undefined ? TENANT : world.tenant) },
   };
-  const scan = makeRecordScan({ withUnit: (_tenantId, fn) => fn(unit), clock: CLOCK });
-  return { scan, inserted, windows, locked };
+  const deps: RecordScanDeps = { withUnit: (_tenantId, fn) => fn(unit), clock: CLOCK };
+  const scan = makeRecordScan(deps);
+  const checkIn = makeCheckInMember(deps);
+  return { scan, checkIn, inserted, windows, locked };
 }
 
 describe("makeRecordScan", () => {
@@ -129,6 +142,7 @@ describe("makeRecordScan", () => {
         isDuplicate: false,
         statusAtScan: "paid",
         source: "staff_app",
+        recordedBy: USER_ID,
       },
     ]);
     expect(windows).toEqual([{ now: NOW, windowMinutes: 10 }]);
@@ -142,6 +156,7 @@ describe("makeRecordScan", () => {
         fn({
           scans: {
             lockByBarcode: async () => ACTIVE,
+            lockById: async () => ACTIVE,
             originalScanWithin: async () => null,
             insert: async (row) => {
               unit.inserted.push(row);
@@ -229,5 +244,105 @@ describe("makeRecordScan", () => {
   it("throws when a locked member cannot be read, since that is a bug", async () => {
     const { scan } = setup({ view: null });
     await expect(scan({ barcode: "K7M2QX" }, CTX)).rejects.toThrow("cannot be read");
+  });
+});
+
+describe("makeCheckInMember", () => {
+  it("stores a manual check in by member id and returns the same result card as a scan", async () => {
+    const { checkIn, inserted, windows, locked } = setup();
+    const result = await checkIn({ memberId: MEMBER_ID.toUpperCase() }, CTX);
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        found: true,
+        visit: {
+          id: "scan-1",
+          memberId: MEMBER_ID,
+          scannedAt: "2026-11-16T12:12:00.000Z",
+          localDate: "2026-11-16",
+          isDuplicate: false,
+          statusAtScan: "paid",
+          source: "manual",
+        },
+        member: {
+          id: MEMBER_ID,
+          name: "Ada Lovelace",
+          standing: "paid",
+          paidThrough: "2026-11-30",
+          status: "active",
+          statusChangedOn: null,
+        },
+        firstCheckInAt: null,
+      },
+    });
+    expect(locked).toEqual([MEMBER_ID]);
+    expect(inserted).toEqual([expect.objectContaining({ source: "manual", recordedBy: USER_ID })]);
+    expect(windows).toEqual([{ now: NOW, windowMinutes: 10 }]);
+  });
+
+  it("applies the repeat window and reports the first check in", async () => {
+    const { checkIn, inserted } = setup({ originalScan: FIRST });
+    const result = await checkIn({ memberId: MEMBER_ID }, CTX);
+    expect(result.ok && result.value.visit.isDuplicate).toBe(true);
+    expect(result.ok && result.value.firstCheckInAt).toBe(FIRST);
+    expect(inserted[0]?.isDuplicate).toBe(true);
+  });
+
+  it.each<Standing>(["paid", "due_soon", "overdue", "inactive"])(
+    "never refuses a check in for standing %s and snapshots it",
+    async (standing) => {
+      const { checkIn, inserted } = setup({ view: view({ standing }) });
+      expect((await checkIn({ memberId: MEMBER_ID }, CTX)).ok).toBe(true);
+      expect(inserted[0]?.statusAtScan).toBe(standing);
+    },
+  );
+
+  it("reports when a paused membership began", async () => {
+    const { checkIn } = setup({
+      member: { id: MEMBER_ID, status: "paused", statusSince: "2026-11-02" },
+      view: view({ standing: "inactive" }),
+    });
+    const result = await checkIn({ memberId: MEMBER_ID }, CTX);
+    expect(result.ok && result.value.member).toMatchObject({
+      status: "paused",
+      statusChangedOn: "2026-11-02",
+    });
+  });
+
+  it("says not found for a member this gym does not have and writes nothing", async () => {
+    const { checkIn, inserted } = setup({ member: null });
+    expect(await checkIn({ memberId: MEMBER_ID }, CTX)).toMatchObject({
+      ok: false,
+      error: { kind: "not_found" },
+    });
+    expect(inserted).toEqual([]);
+  });
+
+  it("refuses a bad id before opening a transaction", async () => {
+    const { checkIn, locked } = setup();
+    expect(await checkIn({ memberId: "nope" }, CTX)).toMatchObject({
+      ok: false,
+      error: { kind: "validation" },
+    });
+    expect(locked).toEqual([]);
+  });
+
+  it("refuses a caller without the scan permission and is guarded by it", async () => {
+    const { checkIn, locked } = setup();
+    expect(await checkIn({ memberId: MEMBER_ID }, { ...CTX, roles: ["member"] })).toMatchObject({
+      ok: false,
+      error: { kind: "forbidden" },
+    });
+    expect(locked).toEqual([]);
+    expect(checkIn.requiredPermission).toBe("scan.record");
+  });
+
+  it("throws when the gym row or a locked member cannot be read, since that is a bug", async () => {
+    await expect(setup({ tenant: null }).checkIn({ memberId: MEMBER_ID }, CTX)).rejects.toThrow(
+      "cannot be read",
+    );
+    await expect(setup({ view: null }).checkIn({ memberId: MEMBER_ID }, CTX)).rejects.toThrow(
+      "cannot be read",
+    );
   });
 });
