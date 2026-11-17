@@ -850,3 +850,42 @@ export interface LedgerUnit {
   readonly members: Pick<MemberStore, "findIdByUser" | "exists">;
   readonly tenants: Pick<TenantStore, "find">;
 }
+
+/** A discount as the add and end use cases read it. */
+export interface StoredDiscount {
+  readonly id: string;
+  readonly memberId: string;
+  readonly kind: "referral" | "manual";
+  readonly amount: number;
+  readonly isRecurring: boolean;
+  readonly startsOn: string;
+  readonly endsOn: string | null;
+  readonly isActive: boolean;
+  readonly consumedInvoiceId: string | null;
+}
+
+export interface NewManualDiscountRow {
+  readonly memberId: string;
+  readonly amount: number;
+  readonly isRecurring: boolean;
+  readonly reason: string;
+  /** The first cycle it can reach starts on or after this day. */
+  readonly startsOn: string;
+  readonly createdBy: string;
+}
+
+/** The discounts of one gym. Rows are never edited or deleted: ending only sets an end date. */
+export interface DiscountStore {
+  find(discountId: string): Promise<StoredDiscount | null>;
+  /** Returns the id of the new row. */
+  insertManual(row: NewManualDiscountRow): Promise<string>;
+  /** Sets the end date of an open or later ending discount. False when it was already ended on or before that day. */
+  end(discountId: string, endsOn: string): Promise<boolean>;
+}
+
+export interface DiscountUnit {
+  readonly discounts: DiscountStore;
+  readonly invoices: Pick<InvoiceStore, "lockMember">;
+  readonly tenants: Pick<TenantStore, "find">;
+  readonly audit: AuditLog;
+}
