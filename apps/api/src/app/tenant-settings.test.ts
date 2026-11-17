@@ -62,6 +62,7 @@ function world(options: { tenant?: Tenant | null; plans?: Plan[] } = {}) {
     plans: {
       list: async () => plans,
       findByKey: async (key) => plans.find((plan) => plan.key === key) ?? null,
+      findMany: async (ids) => plans.filter((plan) => ids.includes(plan.id)),
       findForUpdate: async (id) => plans.find((plan) => plan.id === id) ?? null,
       update: async (id, fields) => {
         const index = plans.findIndex((plan) => plan.id === id);

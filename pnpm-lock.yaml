@@ -26,6 +26,9 @@ importers:
 
   apps/api:
     dependencies:
+      dataloader:
+        specifier: 2.2.3
+        version: 2.2.3
       graphql:
         specifier: ^17.1.0
         version: 17.1.0

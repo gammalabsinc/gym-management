@@ -199,6 +199,8 @@ export interface PlanStore {
   /** Every plan, archived ones included, so a member's old plan still reads. Ordered by key. */
   list(): Promise<readonly Plan[]>;
   findByKey(key: string): Promise<Plan | null>;
+  /** The plans of this gym among `ids`, in no particular order. An unknown id is simply absent. */
+  findMany(ids: readonly string[]): Promise<readonly Plan[]>;
   /** The plan, locked until the transaction ends so the old values an audit event records are true. */
   findForUpdate(id: string): Promise<Plan | null>;
   update(id: string, fields: PlanFields): Promise<void>;
@@ -449,12 +451,24 @@ export interface MemberPageRequest {
 /** Reads members with their derived fields. It belongs to a tenant transaction. */
 export interface MemberQueryStore {
   find(memberId: string, context: MemberQueryContext): Promise<MemberView | null>;
+  /** The members of this gym among `memberIds`, in no particular order. An unknown id is simply absent. */
+  findMany(
+    memberIds: readonly string[],
+    context: MemberQueryContext,
+  ): Promise<readonly MemberView[]>;
   /** Overdue first, then by name, then by id. Rows after the cursor only. */
   list(request: MemberPageRequest, context: MemberQueryContext): Promise<readonly MemberListRow[]>;
 }
 
 export interface MemberQueryUnit {
   readonly members: MemberQueryStore;
+  readonly tenants: Pick<TenantStore, "find">;
+}
+
+/** What the per request loaders read: members with their standing, and plans, in one transaction per batch. */
+export interface LoaderUnit {
+  readonly members: Pick<MemberQueryStore, "findMany">;
+  readonly plans: Pick<PlanStore, "findMany">;
   readonly tenants: Pick<TenantStore, "find">;
 }
 

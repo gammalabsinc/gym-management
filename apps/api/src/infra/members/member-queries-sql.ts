@@ -106,14 +106,14 @@ const MEMBER_ROWS = `
      WHERE m.tenant_id = $1
   )`;
 
-/** $8 is the search pattern or null, $9 a member id or null, $10 to $12 the cursor or null, $13 the limit. */
+/** $8 is the search pattern or null, $9 a list of member ids or null, $10 to $12 the cursor or null, $13 the limit. */
 const SELECT_PAGE = `${MEMBER_ROWS}
   SELECT r.* FROM (SELECT s.*, ${RANK_SQL} AS rank FROM base s) r
    WHERE ($8::text IS NULL
           OR r.name ILIKE $8::text ESCAPE '\\'
           OR r.email ILIKE $8::text ESCAPE '\\'
           OR r.member_no ILIKE $8::text ESCAPE '\\')
-     AND ($9::uuid IS NULL OR r.id = $9::uuid)
+     AND ($9::uuid[] IS NULL OR r.id = ANY($9::uuid[]))
      AND ($10::int IS NULL OR (r.rank, r.sort_name, r.id) > ($10::int, $11::text, $12::uuid))
    ORDER BY r.rank, r.sort_name, r.id
    LIMIT $13::int`;
@@ -194,7 +194,7 @@ export function makeMemberQueryStore(executor: SqlExecutor, tenantId: string): M
     context: Parameters<MemberQueryStore["find"]>[1],
     filters: {
       search: string | null;
-      memberId: string | null;
+      memberIds: readonly string[] | null;
       after: { rank: number; sortName: string; id: string } | null;
       limit: number;
     },
@@ -208,7 +208,7 @@ export function makeMemberQueryStore(executor: SqlExecutor, tenantId: string): M
       context.thisMonthStart,
       context.nextMonthStart,
       filters.search === null ? null : likePattern(filters.search),
-      filters.memberId,
+      filters.memberIds,
       filters.after?.rank ?? null,
       filters.after?.sortName ?? null,
       filters.after?.id ?? null,
@@ -218,14 +218,30 @@ export function makeMemberQueryStore(executor: SqlExecutor, tenantId: string): M
 
   return {
     async find(memberId, context) {
-      const [row] = await page(context, { search: null, memberId, after: null, limit: 1 });
+      const [row] = await page(context, {
+        search: null,
+        memberIds: [memberId],
+        after: null,
+        limit: 1,
+      });
       return row === undefined ? null : toView(row);
+    },
+
+    async findMany(memberIds, context) {
+      if (memberIds.length === 0) return [];
+      const rows = await page(context, {
+        search: null,
+        memberIds,
+        after: null,
+        limit: memberIds.length,
+      });
+      return rows.map(toView);
     },
 
     async list(request, context) {
       const rows = await page(context, {
         search: request.search,
-        memberId: null,
+        memberIds: null,
         after: request.after,
         limit: request.limit,
       });
