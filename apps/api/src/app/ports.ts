@@ -4,7 +4,13 @@ import type { GymSummary } from "../domain/gym-picker";
 import type { InvoiceDraft } from "../domain/invoice-build";
 import type { MemberCursor } from "../domain/member-list";
 import type { MemberListRow, MemberView } from "../domain/member-view";
-import type { Allocation, NewPayment, PaymentMethod, UnpaidInvoice } from "../domain/payment";
+import type {
+  Allocation,
+  LedgerInvoice,
+  NewPayment,
+  PaymentMethod,
+  UnpaidInvoice,
+} from "../domain/payment";
 import type { Role } from "../domain/permissions";
 import type { NewPlan, Plan, PlanFields } from "../domain/plans";
 import type { NewReferralDiscount } from "../domain/referral";
@@ -531,6 +537,11 @@ export interface PaymentStore {
    * still owed. Allocations of a void payment do not count.
    */
   unpaidInvoices(memberId: string): Promise<readonly UnpaidInvoice[]>;
+  /**
+   * Every invoice of the member that is not void, with what is still owed on it. Allocations of
+   * a void payment do not count. Read only, it is what a payment preview starts from.
+   */
+  ledger(memberId: string): Promise<readonly LedgerInvoice[]>;
   /**
    * Writes the payment. Returns its id and when it was recorded, or null when the request id is
    * already taken, in which case nothing is written.

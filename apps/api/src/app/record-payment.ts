@@ -6,17 +6,15 @@ import {
   notFound,
   type ValidationError,
 } from "../domain/errors";
-import { MAX_AHEAD_CYCLES } from "../domain/invoice-build";
 import type { MinorUnits } from "../domain/money";
 import {
   type Allocation,
-  allocateOldestFirst,
   type PaymentMethod,
   parseRecordPayment,
   type RecordPaymentInput,
 } from "../domain/payment";
 import { ok, type Result } from "../domain/result";
-import { generateInvoicesInUnit, peekNextInvoice } from "./invoices";
+import { settlePayment } from "./payment-allocation";
 import type { Clock, PaymentUnit, StoredPayment, WithTenantTx } from "./ports";
 import { type PermissionContext, requirePermission } from "./require-permission";
 
@@ -97,41 +95,14 @@ export function makeRecordPayment(deps: RecordPaymentDeps) {
         // Another member's payment took the request id between the lookup and the insert.
         if (stored === null) return conflict(REQUEST_ID_REUSED_MESSAGE);
 
-        const billing = {
-          tenantId: ctx.tenantId,
-          actorUserId: ctx.userId,
-          requestId: ctx.requestId,
-        };
-        const due = await generateInvoicesInUnit(
+        const settled = await settlePayment(
           unit,
           deps.clock,
-          { memberId: member.id, ahead: 0 },
-          billing,
+          { tenantId: ctx.tenantId, actorUserId: ctx.userId, requestId: ctx.requestId },
+          { memberId: member.id, amount: payment.amount },
         );
-        if (!due.ok) return due;
-
-        const unpaid = await unit.payments.unpaidInvoices(member.id);
-        const first = allocateOldestFirst(payment.amount, unpaid);
-        const allocations = [...first.allocations];
-        let credit = first.remainder;
-        for (let step = 0; step < MAX_AHEAD_CYCLES && credit > 0; step += 1) {
-          const next = await peekNextInvoice(unit, deps.clock, member.id);
-          if (!next.ok) return next;
-          if (next.value === null || next.value.total > credit) break;
-          const built = await generateInvoicesInUnit(
-            unit,
-            deps.clock,
-            { memberId: member.id, ahead: next.value.ahead },
-            billing,
-          );
-          if (!built.ok) return built;
-          for (const invoice of built.value.invoices) {
-            // An invoice that a discount took to zero is paid already and needs no allocation.
-            if (invoice.total > 0)
-              allocations.push({ invoiceId: invoice.id, amount: invoice.total });
-            credit -= invoice.total;
-          }
-        }
+        if (!settled.ok) return settled;
+        const { allocations, credit } = settled.value;
         await unit.payments.insertAllocations(stored.id, allocations);
         await unit.audit.record({
           actorUserId: ctx.userId,

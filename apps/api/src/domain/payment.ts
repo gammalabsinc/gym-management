@@ -143,3 +143,103 @@ export function allocateOldestFirst(
   }
   return { allocations, remainder };
 }
+
+/** What the payment preview asks for. Left out, the amount is the one the server suggests. */
+export interface PreviewPaymentInput {
+  readonly memberId: string;
+  readonly amount?: number | null | undefined;
+}
+
+/** A preview ready to run. A null amount means the suggested one. */
+export interface NewPreview {
+  readonly memberId: string;
+  readonly amount: MinorUnits | null;
+}
+
+/**
+ * Checks a preview request with the same rules a payment has, so an amount that would be refused
+ * when recording is refused here too. Money is whole minor units, so an amount with more than two
+ * decimal places in the gym's currency can never get through.
+ */
+export function parsePreviewPayment(
+  input: PreviewPaymentInput,
+): Result<NewPreview, ValidationError> {
+  const memberId = parseUuid(input.memberId, "memberId");
+  const amount = input.amount ?? null;
+  const issues = [
+    ...(memberId.ok ? [] : memberId.error.issues),
+    ...(amount === null ? [] : amountIssues(amount)),
+  ];
+  return issues.length === 0 && memberId.ok
+    ? ok({ memberId: memberId.value, amount })
+    : validationError("Invalid payment preview", issues);
+}
+
+/** One live invoice of a member as the ledger holds it. Void invoices are not part of it. */
+export interface LedgerInvoice {
+  readonly invoiceId: string;
+  readonly periodStart: string;
+  readonly periodEnd: string;
+  readonly dueDate: string;
+  /** Total minus the allocations that count. Zero means the invoice is paid. */
+  readonly amountDue: MinorUnits;
+}
+
+/** The invoices still owing money, oldest cycle first, the order a payment settles them in. */
+export function unpaidOf(invoices: readonly LedgerInvoice[]): readonly UnpaidInvoice[] {
+  return invoices
+    .filter((invoice) => invoice.amountDue > 0)
+    .toSorted(
+      (a, b) =>
+        a.periodStart.localeCompare(b.periodStart) || a.invoiceId.localeCompare(b.invoiceId),
+    )
+    .map((invoice) => ({ invoiceId: invoice.invoiceId, amountDue: invoice.amountDue }));
+}
+
+/** The ledger after allocations have settled invoices. An allocation never takes it below zero. */
+export function applyAllocations(
+  invoices: readonly LedgerInvoice[],
+  allocations: readonly Allocation[],
+): readonly LedgerInvoice[] {
+  return invoices.map((invoice) => {
+    const settled = allocations
+      .filter((allocation) => allocation.invoiceId === invoice.invoiceId)
+      .reduce((sum, allocation) => sum + allocation.amount, 0);
+    return { ...invoice, amountDue: Math.max(0, invoice.amountDue - settled) };
+  });
+}
+
+/**
+ * The last day covered by paid invoices that come before the oldest unpaid one. It is the twin
+ * of the paid through column the member queries read, and says null when nothing is paid yet.
+ */
+export function paidThroughOf(invoices: readonly LedgerInvoice[]): string | null {
+  const oldestUnpaid = invoices
+    .filter((invoice) => invoice.amountDue > 0)
+    .map((invoice) => invoice.dueDate)
+    .toSorted()[0];
+  const covered = invoices
+    .filter(
+      (invoice) =>
+        invoice.amountDue === 0 &&
+        (oldestUnpaid === undefined || invoice.periodStart < oldestUnpaid),
+    )
+    .map((invoice) => invoice.periodEnd)
+    .toSorted();
+  return covered.at(-1) ?? null;
+}
+
+/**
+ * The amount to prefill: what the member owes on invoices due by today, or when nothing is due
+ * yet the oldest open invoice. Null when every invoice is paid.
+ */
+export function suggestedAmountOf(
+  invoices: readonly LedgerInvoice[],
+  today: string,
+): MinorUnits | null {
+  const owed = invoices
+    .filter((invoice) => invoice.dueDate <= today)
+    .reduce((sum, invoice) => sum + invoice.amountDue, 0);
+  if (owed > 0) return owed;
+  return unpaidOf(invoices)[0]?.amountDue ?? null;
+}
