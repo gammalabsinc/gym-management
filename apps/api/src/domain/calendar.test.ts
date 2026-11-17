@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { daysBetween, daysInMonth, isCalendarDate, isLeapYear } from "./calendar";
+import {
+  daysBetween,
+  daysInMonth,
+  isCalendarDate,
+  isLeapYear,
+  localDateIn,
+  nextDate,
+} from "./calendar";
 
 describe("isLeapYear", () => {
   it("follows the Gregorian rules", () => {
@@ -83,5 +90,36 @@ describe("daysBetween", () => {
         }
       }
     }
+  });
+});
+
+describe("nextDate", () => {
+  it("moves one day inside a month", () => {
+    expect(nextDate("2026-11-14")).toBe("2026-11-15");
+  });
+
+  it("rolls over the end of a month, a short month and a leap February", () => {
+    expect(nextDate("2026-11-30")).toBe("2026-12-01");
+    expect(nextDate("2026-02-28")).toBe("2026-03-01");
+    expect(nextDate("2024-02-28")).toBe("2024-02-29");
+    expect(nextDate("2024-02-29")).toBe("2024-03-01");
+  });
+
+  it("rolls over the end of a year", () => {
+    expect(nextDate("2026-12-31")).toBe("2027-01-01");
+  });
+});
+
+describe("localDateIn", () => {
+  const instant = new Date("2026-11-17T03:00:00.000Z");
+
+  it("gives the calendar date in the zone, not the UTC date", () => {
+    expect(localDateIn(instant, "America/Toronto")).toBe("2026-11-16");
+    expect(localDateIn(instant, "Asia/Tokyo")).toBe("2026-11-17");
+    expect(localDateIn(instant, "UTC")).toBe("2026-11-17");
+  });
+
+  it("refuses a zone that does not exist", () => {
+    expect(() => localDateIn(instant, "Not/AZone")).toThrow(RangeError);
   });
 });

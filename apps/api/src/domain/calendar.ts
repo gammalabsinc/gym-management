@@ -40,3 +40,32 @@ function dayNumber(text: string): number {
 export function daysBetween(from: string, to: string): number {
   return dayNumber(to) - dayNumber(from);
 }
+
+/** The calendar day after a real calendar date. Both are written YYYY-MM-DD. */
+export function nextDate(text: string): string {
+  const year = Number(text.slice(0, 4));
+  const month = Number(text.slice(5, 7));
+  const day = Number(text.slice(8, 10));
+  const parts =
+    day < daysInMonth(year, month)
+      ? { year, month, day: day + 1 }
+      : month < 12
+        ? { year, month: month + 1, day: 1 }
+        : { year: year + 1, month: 1, day: 1 };
+  const pad = (value: number, width: number) => String(value).padStart(width, "0");
+  return `${pad(parts.year, 4)}-${pad(parts.month, 2)}-${pad(parts.day, 2)}`;
+}
+
+/**
+ * The calendar date of an instant in an IANA time zone, written YYYY-MM-DD. Every billing date is
+ * the gym's local date, never the UTC date. The zone comes from the tenant row, so an unknown zone
+ * is a bug and throws.
+ */
+export function localDateIn(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(instant);
+}

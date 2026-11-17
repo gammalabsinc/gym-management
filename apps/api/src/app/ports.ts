@@ -1,5 +1,9 @@
+import type { DateText } from "../domain/billing-cycle";
+import type { Discount } from "../domain/discounts";
+import type { InvoiceDraft } from "../domain/invoice-build";
 import type { Role } from "../domain/permissions";
 import type { NewPlan, Plan, PlanFields } from "../domain/plans";
+import type { MembershipStatus } from "../domain/standing";
 import type { Tenant } from "../domain/tenant";
 
 export interface Clock {
@@ -197,5 +201,50 @@ export interface TenantStore {
 export interface SettingsUnit {
   readonly tenants: TenantStore;
   readonly plans: PlanStore;
+  readonly audit: AuditLog;
+}
+
+/** What invoice generation reads about a member: the billing day and the current period row. */
+export interface BillableMember {
+  readonly id: string;
+  /** Day of the month each cycle starts, 1 to 31. */
+  readonly billingDay: number;
+  /** Status and plan of the member's current period. */
+  readonly status: MembershipStatus;
+  readonly planId: string;
+  /** First day of the member's current stretch of active membership. */
+  readonly activeFrom: DateText;
+}
+
+export interface PlanFees {
+  readonly admissionFee: number;
+  readonly monthlyFee: number;
+}
+
+/** The invoices of one gym. It belongs to a tenant transaction, so it only ever sees that gym's rows. */
+export interface InvoiceStore {
+  /**
+   * The member with the current period, locked until the transaction ends, so two runs for one
+   * member take turns. Null when the gym has no such member.
+   */
+  lockMember(memberId: string): Promise<BillableMember | null>;
+  findPlanFees(planId: string): Promise<PlanFees | null>;
+  /** The latest `period_end` over every invoice of the member, void ones included, or null. */
+  lastPeriodEnd(memberId: string): Promise<DateText | null>;
+  /** Every active discount row of the member. The domain decides which of them apply. */
+  discountsOf(memberId: string): Promise<readonly Discount[]>;
+  /**
+   * Writes the invoice and its lines. Returns the new id, or null when the member already has a
+   * live invoice for that cycle, in which case nothing is written.
+   */
+  insert(memberId: string, draft: InvoiceDraft): Promise<string | null>;
+  /** Marks one time discounts as used by an invoice, so they never land on another. */
+  markConsumed(discountIds: readonly string[], invoiceId: string): Promise<void>;
+}
+
+/** Everything invoice generation needs, all inside one tenant transaction. */
+export interface InvoiceUnit {
+  readonly invoices: InvoiceStore;
+  readonly tenants: Pick<TenantStore, "find">;
   readonly audit: AuditLog;
 }
