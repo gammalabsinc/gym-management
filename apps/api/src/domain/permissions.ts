@@ -15,6 +15,8 @@ export const ROLE_PERMISSIONS = {
     "member.pause",
     "member.cancel",
     "payment.record",
+    "payment.void",
+    "invoice.void",
     "scan.record",
     "plan.manage",
     "discount.manage",

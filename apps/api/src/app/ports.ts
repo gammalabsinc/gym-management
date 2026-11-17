@@ -17,6 +17,7 @@ import type { NewReferralDiscount } from "../domain/referral";
 import type { ScanSource } from "../domain/scan";
 import type { MembershipStatus, Standing } from "../domain/standing";
 import type { Tenant, TenantSettings } from "../domain/tenant";
+import type { SpareCredit } from "../domain/voids";
 
 export interface Clock {
   now(): Date;
@@ -614,4 +615,55 @@ export interface ScanUnit {
   readonly scans: ScanStore;
   readonly members: Pick<MemberQueryStore, "find">;
   readonly tenants: Pick<TenantStore, "find">;
+}
+
+/** A payment as a void reads it. */
+export interface VoidablePayment {
+  readonly id: string;
+  readonly memberId: string;
+  readonly amount: number;
+  readonly isVoid: boolean;
+  /** Every allocation the payment wrote, oldest invoice first. They stop counting when it is voided. */
+  readonly allocations: readonly Allocation[];
+}
+
+/** An invoice as a void reads it. */
+export interface VoidableInvoice {
+  readonly id: string;
+  readonly memberId: string;
+  readonly isVoid: boolean;
+  /** The first day of the cycle, written YYYY-MM-DD. */
+  readonly periodStart: string;
+  readonly total: number;
+  /** The allocations on the invoice that count, which are those of payments that are not void. */
+  readonly counted: number;
+}
+
+export interface VoidDetails {
+  readonly reason: string;
+  readonly voidedBy: string;
+  readonly voidedAt: Date;
+}
+
+/** Voids payments and invoices. It belongs to a tenant transaction, so it only ever sees that gym's rows. */
+export interface VoidStore {
+  findPayment(paymentId: string): Promise<VoidablePayment | null>;
+  findInvoice(invoiceId: string): Promise<VoidableInvoice | null>;
+  /** Returns false, changing nothing, when the payment was void already. */
+  voidPayment(paymentId: string, details: VoidDetails): Promise<boolean>;
+  /** Returns false, changing nothing, when the invoice was void already. */
+  voidInvoice(invoiceId: string, details: VoidDetails): Promise<boolean>;
+  /**
+   * The payments of the member that are not void and have part of their amount unallocated, oldest
+   * payment first.
+   */
+  spareCredits(memberId: string): Promise<readonly SpareCredit[]>;
+}
+
+/** Everything voiding needs, all inside one tenant transaction. */
+export interface VoidUnit {
+  readonly voids: VoidStore;
+  readonly payments: Pick<PaymentStore, "unpaidInvoices" | "insertAllocations">;
+  readonly invoices: Pick<InvoiceStore, "lockMember">;
+  readonly audit: AuditLog;
 }
