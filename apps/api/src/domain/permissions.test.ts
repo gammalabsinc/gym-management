@@ -28,6 +28,12 @@ describe("ROLE_PERMISSIONS", () => {
     expect(hasPermission(["owner"], "member.cancel")).toBe(true);
     expect(hasPermission(["staff"], "member.cancel")).toBe(false);
   });
+
+  it("lets staff pause and resume", () => {
+    expect(hasPermission(["staff"], "member.pause")).toBe(true);
+    expect(hasPermission(["owner"], "member.pause")).toBe(true);
+    expect(hasPermission(["member"], "member.pause")).toBe(false);
+  });
 });
 
 describe("hasPermission", () => {
