@@ -77,10 +77,10 @@ export function makeStaffDirectory(executor: SqlExecutor, tenantId: string): Sta
 
     async createUser(user) {
       const [row] = (await executor.query(
-        `INSERT INTO users (tenant_id, email, name) VALUES ($1, $2, $3)
+        `INSERT INTO users (tenant_id, email, name, phone) VALUES ($1, $2, $3, $4)
          ON CONFLICT (tenant_id, email) DO NOTHING
          RETURNING id`,
-        [tenantId, user.email, user.name],
+        [tenantId, user.email, user.name, user.phone ?? null],
       )) as { id: string }[];
       return row === undefined ? null : row.id;
     },

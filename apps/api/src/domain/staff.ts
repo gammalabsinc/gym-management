@@ -1,3 +1,4 @@
+import { isEmailAddress, MAX_EMAIL_LENGTH, normalizeEmail } from "./email";
 import { type ValidationError, validationError } from "./errors";
 import type { Role } from "./permissions";
 import { ok, type Result } from "./result";
@@ -7,10 +8,8 @@ import { parseUuid } from "./uuid";
 export const STAFF_ROLES = ["owner", "staff"] as const satisfies readonly Role[];
 export type StaffRole = (typeof STAFF_ROLES)[number];
 
-export const MAX_EMAIL_LENGTH = 254;
+export { MAX_EMAIL_LENGTH };
 export const MAX_NAME_LENGTH = 120;
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function isStaffRole(role: string): role is StaffRole {
   return (STAFF_ROLES as readonly string[]).includes(role);
@@ -47,11 +46,11 @@ export interface Invite {
  * name that is null when blank, and a role that is owner or staff. Every problem is reported.
  */
 export function parseInvite(input: InviteInput): Result<Invite, ValidationError> {
-  const email = input.email.trim().toLowerCase();
+  const email = normalizeEmail(input.email);
   const name = input.name?.trim() ?? "";
   const role = input.role;
   const issues = [
-    ...(email.length > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.test(email)
+    ...(!isEmailAddress(email)
       ? [{ path: ["email"], message: "Enter a valid email address" }]
       : []),
     ...(name.length > MAX_NAME_LENGTH
