@@ -1,4 +1,4 @@
-import type { AccountDirectory, GymAccount } from "../../app/ports";
+import type { AccountDirectory, AccountLookup, GymAccount } from "../../app/ports";
 import { CLAIM_EMAIL_SETTING, CLAIM_SUBJECT_SETTING } from "../db/claim-settings";
 import type { SqlExecutor } from "../db/sql-executor";
 
@@ -47,6 +47,28 @@ export function makeAccountDirectory(transact: RunInTransaction): AccountDirecto
         const rows = (await executor.query(
           "SELECT id, tenant_id FROM users WHERE auth_subject = $1 ORDER BY tenant_id, id",
           [identity.subject],
+        )) as AccountRow[];
+        return rows.map((row): GymAccount => ({ userId: row.id, tenantId: row.tenant_id }));
+      });
+    },
+  };
+}
+
+/**
+ * Lists the gyms of a subject that is already signed in. It sets only the subject, never the
+ * email, so the account claim policies show exactly the rows linked to that subject and nothing
+ * waiting for an email. Rows switched off are left out. It writes nothing.
+ */
+export function makeAccountLookup(transact: RunInTransaction): AccountLookup {
+  return {
+    gymsOf(subject) {
+      return transact(async (executor) => {
+        await executor.query("SELECT set_config($1, $2, true)", [CLAIM_SUBJECT_SETTING, subject]);
+        const rows = (await executor.query(
+          `SELECT id, tenant_id FROM users
+            WHERE auth_subject = $1 AND is_active
+            ORDER BY tenant_id, id`,
+          [subject],
         )) as AccountRow[];
         return rows.map((row): GymAccount => ({ userId: row.id, tenantId: row.tenant_id }));
       });
