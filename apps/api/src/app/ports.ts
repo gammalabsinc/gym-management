@@ -1,5 +1,6 @@
 import type { DateText } from "../domain/billing-cycle";
 import type { Discount } from "../domain/discounts";
+import type { GymSummary } from "../domain/gym-picker";
 import type { InvoiceDraft } from "../domain/invoice-build";
 import type { Role } from "../domain/permissions";
 import type { NewPlan, Plan, PlanFields } from "../domain/plans";
@@ -247,4 +248,26 @@ export interface InvoiceUnit {
   readonly invoices: InvoiceStore;
   readonly tenants: Pick<TenantStore, "find">;
   readonly audit: AuditLog;
+}
+
+/**
+ * Reads the gym rows a Google account already holds. It never links a row, so it is safe to call
+ * on any request that carries a session, unlike `AccountDirectory.claim`.
+ */
+export interface AccountLookup {
+  /** The active user rows linked to this subject, one per gym, ordered by gym id. */
+  gymsOf(subject: string): Promise<readonly GymAccount[]>;
+}
+
+/** The gym picker's view of one gym, for one user. It belongs to a tenant transaction. */
+export interface GymPickerStore {
+  /**
+   * The gym with this user's roles in it. Null when the user holds no role there, the user row
+   * is switched off, or the gym is switched off.
+   */
+  find(userId: string): Promise<GymSummary | null>;
+}
+
+export interface GymPickerUnit {
+  readonly gyms: GymPickerStore;
 }
