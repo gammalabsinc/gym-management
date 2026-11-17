@@ -7,6 +7,7 @@ import {
   MAX_MEMBER_NAME_LENGTH,
   type NewMemberInput,
   parseNewMember,
+  parseProfileEdit,
 } from "./member";
 
 const TODAY = "2026-11-16";
@@ -95,5 +96,92 @@ describe("member codes", () => {
       expect(isMemberCode(bad)).toBe(false);
     }
     expect([...CODE_ALPHABET].every((char) => isMemberCode(char.repeat(CODE_LENGTH)))).toBe(true);
+  });
+});
+
+describe("parseProfileEdit", () => {
+  const MEMBER_ID = "55555555-5555-4555-8555-555555555555";
+  const edit = (fields: Record<string, unknown>, memberId = MEMBER_ID) =>
+    parseProfileEdit({ memberId, fields });
+
+  it("accepts a name and a phone, trimmed", () => {
+    expect(edit({ name: "  Ada ", phone: " 416-555-0100 " })).toEqual({
+      ok: true,
+      value: { memberId: MEMBER_ID, change: { name: "Ada", phone: "416-555-0100" } },
+    });
+  });
+
+  it("accepts one field alone", () => {
+    expect(edit({ name: "Ada" })).toEqual({
+      ok: true,
+      value: { memberId: MEMBER_ID, change: { name: "Ada" } },
+    });
+    expect(edit({ phone: "416-555-0100" })).toEqual({
+      ok: true,
+      value: { memberId: MEMBER_ID, change: { phone: "416-555-0100" } },
+    });
+  });
+
+  it("clears the phone with null or an empty string", () => {
+    for (const phone of [null, "  "]) {
+      expect(edit({ phone })).toEqual({
+        ok: true,
+        value: { memberId: MEMBER_ID, change: { phone: null } },
+      });
+    }
+  });
+
+  it("ignores a field that was sent as undefined", () => {
+    expect(edit({ name: "Ada", phone: undefined })).toEqual({
+      ok: true,
+      value: { memberId: MEMBER_ID, change: { name: "Ada" } },
+    });
+  });
+
+  it("refuses every field outside the allow list", () => {
+    const result = edit({ name: "Ada", memberNo: "AAAAAA", barcode: "BBBBBB", email: "a@b.test" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.issues).toEqual([
+        { path: ["memberNo"], message: "Cannot be changed" },
+        { path: ["barcode"], message: "Cannot be changed" },
+        { path: ["email"], message: "Cannot be changed" },
+      ]);
+    }
+  });
+
+  it("refuses an edit with nothing in it", () => {
+    const result = edit({});
+    expect(!result.ok && result.error.issues).toEqual([{ path: [], message: "Nothing to change" }]);
+  });
+
+  it("checks the name", () => {
+    const empty = edit({ name: " " });
+    expect(!empty.ok && empty.error.issues).toEqual([{ path: ["name"], message: "Required" }]);
+    const long = edit({ name: "x".repeat(MAX_MEMBER_NAME_LENGTH + 1) });
+    expect(!long.ok && long.error.issues[0]?.path).toEqual(["name"]);
+  });
+
+  it("checks the phone", () => {
+    const result = edit({ phone: "call me" });
+    expect(!result.ok && result.error.issues).toEqual([
+      { path: ["phone"], message: "Enter a valid phone number" },
+    ]);
+  });
+
+  it("requires text where text is expected", () => {
+    const result = edit({ name: 5, phone: 7 });
+    expect(!result.ok && result.error.issues).toEqual([
+      { path: ["name"], message: "Must be text" },
+      { path: ["phone"], message: "Must be text" },
+    ]);
+  });
+
+  it("checks the member id and reports it with the other problems", () => {
+    const result = edit({ name: " " }, "nope");
+    expect(!result.ok && result.error.issues.map((issue) => issue.path[0])).toEqual([
+      "memberId",
+      "name",
+    ]);
   });
 });

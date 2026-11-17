@@ -42,12 +42,18 @@ export interface NewMember {
   readonly billingDay: number;
 }
 
-function nameIssues(name: string): FieldIssue[] {
-  if (name === "") return [{ path: ["fullName"], message: "Required" }];
+function nameIssues(name: string, field = "fullName"): FieldIssue[] {
+  if (name === "") return [{ path: [field], message: "Required" }];
   if (name.length > MAX_MEMBER_NAME_LENGTH) {
-    return [{ path: ["fullName"], message: `At most ${MAX_MEMBER_NAME_LENGTH} characters` }];
+    return [{ path: [field], message: `At most ${MAX_MEMBER_NAME_LENGTH} characters` }];
   }
   return [];
+}
+
+function phoneIssues(phone: string): FieldIssue[] {
+  return phone === "" || PHONE_PATTERN.test(phone)
+    ? []
+    : [{ path: ["phone"], message: "Enter a valid phone number" }];
 }
 
 function joinDateIssues(joinDate: string, today: string): FieldIssue[] {
@@ -78,9 +84,7 @@ export function parseNewMember(
   const issues = [
     ...nameIssues(fullName),
     ...(isEmailAddress(email) ? [] : [{ path: ["email"], message: "Enter a valid email address" }]),
-    ...(phone === "" || PHONE_PATTERN.test(phone)
-      ? []
-      : [{ path: ["phone"], message: "Enter a valid phone number" }]),
+    ...phoneIssues(phone),
     ...joinDateIssues(joinDate, today),
     ...(referral !== null && !referral.ok ? referral.error.issues : []),
   ];
@@ -92,5 +96,78 @@ export function parseNewMember(
     joinDate,
     referredBy: referral?.ok ? referral.value : null,
     billingDay: Number(joinDate.slice(8, 10)),
+  });
+}
+
+/** The only fields an edit may change. Everything else about a member is fixed after it is added. */
+export const EDITABLE_PROFILE_FIELDS = ["name", "phone"] as const;
+
+/** What staff type on the edit member screen. Fields outside the allow list are refused. */
+export interface MemberProfileEditInput {
+  readonly memberId: string;
+  readonly fields: Readonly<Record<string, unknown>>;
+}
+
+/** The fields that were sent, in the form they are stored in. A null phone clears it. */
+export interface ProfileChange {
+  readonly name?: string;
+  readonly phone?: string | null;
+}
+
+export interface ParsedProfileEdit {
+  readonly memberId: string;
+  readonly change: ProfileChange;
+}
+
+function stringField(value: unknown, field: string): Result<string, ValidationError> {
+  return typeof value === "string"
+    ? ok(value.trim())
+    : validationError("Invalid member", [{ path: [field], message: "Must be text" }]);
+}
+
+function parseNameChange(value: unknown): Result<string, ValidationError> {
+  const text = stringField(value, "name");
+  if (!text.ok) return text;
+  const issues = nameIssues(text.value, "name");
+  return issues.length > 0 ? validationError("Invalid member", issues) : text;
+}
+
+function parsePhoneChange(value: unknown): Result<string | null, ValidationError> {
+  if (value === null) return ok(null);
+  const text = stringField(value, "phone");
+  if (!text.ok) return text;
+  const issues = phoneIssues(text.value);
+  if (issues.length > 0) return validationError("Invalid member", issues);
+  return ok(text.value === "" ? null : text.value);
+}
+
+/**
+ * Checks an edit against the allow list. A field outside the list, such as member_no, barcode or
+ * email, is reported and nothing is written. Every problem is reported, and an edit with no
+ * allowed field in it is refused.
+ */
+export function parseProfileEdit(
+  input: MemberProfileEditInput,
+): Result<ParsedProfileEdit, ValidationError> {
+  const memberId = parseUuid(input.memberId, "memberId");
+  const sent = Object.keys(input.fields).filter((key) => input.fields[key] !== undefined);
+  const issues: FieldIssue[] = [
+    ...(memberId.ok ? [] : memberId.error.issues),
+    ...sent
+      .filter((key) => !(EDITABLE_PROFILE_FIELDS as readonly string[]).includes(key))
+      .map((key) => ({ path: [key], message: "Cannot be changed" })),
+    ...(sent.length === 0 ? [{ path: [], message: "Nothing to change" }] : []),
+  ];
+  const name = sent.includes("name") ? parseNameChange(input.fields.name) : undefined;
+  const phone = sent.includes("phone") ? parsePhoneChange(input.fields.phone) : undefined;
+  if (name?.ok === false) issues.push(...name.error.issues);
+  if (phone?.ok === false) issues.push(...phone.error.issues);
+  if (issues.length > 0 || !memberId.ok) return validationError("Invalid member", issues);
+  return ok({
+    memberId: memberId.value,
+    change: {
+      ...(name?.ok ? { name: name.value } : {}),
+      ...(phone?.ok ? { phone: phone.value } : {}),
+    },
   });
 }
