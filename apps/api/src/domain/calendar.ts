@@ -96,3 +96,13 @@ export function localDateIn(instant: Date, timeZone: string): string {
     day: "2-digit",
   }).format(instant);
 }
+
+/** The wall clock time of an instant, as a Date or epoch milliseconds, in an IANA time zone, written HH:mm. */
+export function localTimeIn(instant: Date | number, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(instant);
+}

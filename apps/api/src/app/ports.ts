@@ -719,6 +719,20 @@ export interface AttendanceQueryUnit {
   readonly tenants: Pick<TenantStore, "find">;
 }
 
+/** Finds the member record of a signed in user, so a member's own reads never take a member id from input. */
+export interface MemberSelfStore {
+  /** The id of the member that belongs to this user in the gym of the transaction, or null for a user who is not a member. */
+  memberIdOfUser(userId: string): Promise<string | null>;
+}
+
+/** Everything the member's own screens read, in one tenant transaction. */
+export interface MemberSelfServiceUnit {
+  readonly self: MemberSelfStore;
+  readonly members: Pick<MemberQueryStore, "find">;
+  readonly attendance: Pick<AttendanceQueryStore, "history" | "monthVisits">;
+  readonly tenants: Pick<TenantStore, "find">;
+}
+
 /** A payment as a void reads it. */
 export interface VoidablePayment {
   readonly id: string;
