@@ -7,6 +7,7 @@ import type { MemberListRow, MemberView } from "../domain/member-view";
 import type { Allocation, NewPayment, PaymentMethod, UnpaidInvoice } from "../domain/payment";
 import type { Role } from "../domain/permissions";
 import type { NewPlan, Plan, PlanFields } from "../domain/plans";
+import type { NewReferralDiscount } from "../domain/referral";
 import type { MembershipStatus } from "../domain/standing";
 import type { Tenant, TenantSettings } from "../domain/tenant";
 
@@ -350,6 +351,7 @@ export interface MemberUnit {
   readonly members: MemberStore;
   readonly staff: Pick<StaffDirectory, "findByEmail" | "createUser" | "addRole">;
   readonly plans: Pick<PlanStore, "findByKey">;
+  readonly referrals: ReferralStore;
   readonly invoices: InvoiceStore;
   readonly tenants: Pick<TenantStore, "find">;
   readonly audit: AuditLog;
@@ -540,4 +542,22 @@ export interface PaymentStore {
 /** Everything recording a payment needs, all inside one tenant transaction. */
 export interface PaymentUnit extends InvoiceUnit {
   readonly payments: PaymentStore;
+}
+
+/** A referral discount row to write. */
+export interface NewReferralRow extends NewReferralDiscount {
+  readonly createdBy: string | null;
+}
+
+/** The referral discounts of one gym. It belongs to a tenant transaction. */
+export interface ReferralStore {
+  /**
+   * Who referred the member, as captured when the member was added. Null when nobody did, and
+   * undefined when the gym has no such member.
+   */
+  referrerOf(memberId: string): Promise<string | null | undefined>;
+  /** True when a referral between these two members already has discount rows, either way round. */
+  exists(memberId: string, referrerId: string): Promise<boolean>;
+  /** Writes one row. Returns its id, or null when that exact referral row is already there. */
+  insert(row: NewReferralRow): Promise<string | null>;
 }
