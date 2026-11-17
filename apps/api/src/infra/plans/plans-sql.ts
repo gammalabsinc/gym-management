@@ -44,6 +44,12 @@ export function makePlanStore(executor: SqlExecutor, tenantId: string): PlanStor
       return plan ?? null;
     },
 
+    findMany: (ids) =>
+      rows(`SELECT ${COLUMNS} FROM plans WHERE tenant_id = $1 AND id = ANY($2::uuid[])`, [
+        tenantId,
+        ids,
+      ]),
+
     async findForUpdate(id) {
       const [plan] = await rows(
         `SELECT ${COLUMNS} FROM plans WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,

@@ -59,6 +59,8 @@ function harness(rows: MemberListRow[], tenant: Tenant | null = TENANT) {
         finds.push({ id, context });
         return rows.find((row) => row.member.id === id)?.member ?? null;
       },
+      findMany: async (ids) =>
+        rows.filter((row) => ids.includes(row.member.id)).map((row) => row.member),
       list: async (request, context) => {
         requests.push({ request, context });
         return rows;

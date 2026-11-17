@@ -64,6 +64,7 @@ function setup(world: World = {}) {
     plans: {
       list: async () => [],
       findByKey: async () => plan,
+      findMany: async () => [plan],
       findForUpdate: async () => plan,
       update: async () => {},
       insertIfAbsent: async (newPlan) => {

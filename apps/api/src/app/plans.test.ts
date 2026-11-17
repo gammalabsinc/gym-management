@@ -17,6 +17,9 @@ function world(initial: Plan[] = []) {
     async findByKey(key) {
       return hooks.hideAfterConflict ? null : (plans.find((plan) => plan.key === key) ?? null);
     },
+    async findMany(ids) {
+      return plans.filter((plan) => ids.includes(plan.id));
+    },
     async findForUpdate(id) {
       return plans.find((plan) => plan.id === id) ?? null;
     },
