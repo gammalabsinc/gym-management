@@ -42,6 +42,16 @@ describe("ROLE_PERMISSIONS", () => {
   });
 });
 
+describe("void permissions", () => {
+  it("are held by owners and by nobody else", () => {
+    for (const permission of ["payment.void", "invoice.void"]) {
+      expect(hasPermission(["owner"], permission)).toBe(true);
+      expect(hasPermission(["staff"], permission)).toBe(false);
+      expect(hasPermission(["member"], permission)).toBe(false);
+    }
+  });
+});
+
 describe("hasPermission", () => {
   it("allows a permission the role holds", () => {
     expect(hasPermission(["staff"], "payment.record")).toBe(true);

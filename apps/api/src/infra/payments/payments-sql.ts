@@ -1,5 +1,5 @@
 import type { PaymentStore, StoredPayment } from "../../app/ports";
-import type { PaymentMethod } from "../../domain/payment";
+import type { Allocation, PaymentMethod } from "../../domain/payment";
 import type { SqlExecutor } from "../db/sql-executor";
 
 /** Dates leave Postgres as plain text, so no time zone of this process can shift a calendar day. */
@@ -17,6 +17,23 @@ interface PaymentRow {
   recorded_by: string;
   is_void: boolean;
   void_reason: string | null;
+}
+
+/** What a payment allocated, oldest invoice first. Void payments keep theirs, they just stop counting. */
+export async function paymentAllocations(
+  executor: SqlExecutor,
+  tenantId: string,
+  paymentId: string,
+): Promise<readonly Allocation[]> {
+  const found = (await executor.query(
+    `SELECT a.invoice_id, a.amount
+       FROM payment_allocations a
+       JOIN invoices i ON i.tenant_id = a.tenant_id AND i.id = a.invoice_id
+      WHERE a.tenant_id = $1 AND a.payment_id = $2
+      ORDER BY i.period_start, i.id`,
+    [tenantId, paymentId],
+  )) as { invoice_id: string; amount: number }[];
+  return found.map((a) => ({ invoiceId: a.invoice_id, amount: a.amount }));
 }
 
 /**
@@ -39,14 +56,7 @@ export function makePaymentStore(executor: SqlExecutor, tenantId: string): Payme
         [tenantId, clientRequestId],
       );
       if (row === undefined) return null;
-      const allocations = await rows<{ invoice_id: string; amount: number }>(
-        `SELECT a.invoice_id, a.amount
-           FROM payment_allocations a
-           JOIN invoices i ON i.tenant_id = a.tenant_id AND i.id = a.invoice_id
-          WHERE a.tenant_id = $1 AND a.payment_id = $2
-          ORDER BY i.period_start, i.id`,
-        [tenantId, row.id],
-      );
+      const allocations = await paymentAllocations(executor, tenantId, row.id);
       return {
         id: row.id,
         memberId: row.member_id,
@@ -58,7 +68,7 @@ export function makePaymentStore(executor: SqlExecutor, tenantId: string): Payme
         recordedBy: row.recorded_by,
         isVoid: row.is_void,
         voidReason: row.void_reason,
-        allocations: allocations.map((a) => ({ invoiceId: a.invoice_id, amount: a.amount })),
+        allocations,
       } satisfies StoredPayment;
     },
 
