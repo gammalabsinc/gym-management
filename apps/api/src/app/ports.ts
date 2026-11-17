@@ -5,7 +5,7 @@ import type { InvoiceDraft } from "../domain/invoice-build";
 import type { Role } from "../domain/permissions";
 import type { NewPlan, Plan, PlanFields } from "../domain/plans";
 import type { MembershipStatus } from "../domain/standing";
-import type { Tenant } from "../domain/tenant";
+import type { Tenant, TenantSettings } from "../domain/tenant";
 
 export interface Clock {
   now(): Date;
@@ -270,4 +270,29 @@ export interface GymPickerStore {
 
 export interface GymPickerUnit {
   readonly gyms: GymPickerStore;
+}
+
+/** A gym row to insert. The id is chosen by the caller, so the transaction can be scoped to it. */
+export interface NewGymRow {
+  readonly id: string;
+  readonly name: string;
+  readonly subdomain: string;
+  readonly timezone: string;
+  readonly currency: string;
+  readonly settings: TenantSettings;
+}
+
+/** Adds gyms. The tenants table is not tenant scoped, because a gym is the row itself. */
+export interface GymProvisioner {
+  /** Returns false, writing nothing, when a gym already has that subdomain. */
+  insertIfAbsent(gym: NewGymRow): Promise<boolean>;
+  findIdBySubdomain(subdomain: string): Promise<string | null>;
+}
+
+/** Everything adding a gym needs, all inside one transaction scoped to the new gym's id. */
+export interface OnboardUnit {
+  readonly gyms: GymProvisioner;
+  readonly staff: Pick<StaffDirectory, "createUser" | "addRole">;
+  readonly plans: PlanStore;
+  readonly audit: AuditLog;
 }

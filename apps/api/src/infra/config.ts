@@ -1,10 +1,49 @@
 import { z } from "zod";
 import { type Config, LOG_LEVELS, MODES, NODE_ENVS } from "../app/config";
+import type { OnboardGymInput } from "../domain/onboarding";
+import { MAX_FEE } from "../domain/plans";
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
 const REDACTED = "[redacted]";
 const MIN_PASSWORD_LENGTH = 16;
+
+interface OnboardingEnv {
+  readonly GYM_NAME?: string | undefined;
+  readonly GYM_SUBDOMAIN?: string | undefined;
+  readonly GYM_TIMEZONE?: string | undefined;
+  readonly GYM_CURRENCY?: string | undefined;
+  readonly OWNER_EMAIL?: string | undefined;
+  readonly OWNER_NAME?: string | undefined;
+  readonly ADMISSION_FEE?: number | undefined;
+  readonly MONTHLY_FEE?: number | undefined;
+}
+
+/** The onboarding input, or nothing at all unless every required variable is set. The fees default to zero. */
+function onboardingFrom(env: OnboardingEnv): { readonly onboarding?: OnboardGymInput } {
+  const { GYM_NAME, GYM_SUBDOMAIN, GYM_TIMEZONE, GYM_CURRENCY, OWNER_EMAIL } = env;
+  if (
+    GYM_NAME === undefined ||
+    GYM_SUBDOMAIN === undefined ||
+    GYM_TIMEZONE === undefined ||
+    GYM_CURRENCY === undefined ||
+    OWNER_EMAIL === undefined
+  ) {
+    return {};
+  }
+  return {
+    onboarding: {
+      name: GYM_NAME,
+      subdomain: GYM_SUBDOMAIN,
+      timezone: GYM_TIMEZONE,
+      currency: GYM_CURRENCY,
+      ownerEmail: OWNER_EMAIL,
+      ownerName: env.OWNER_NAME,
+      admissionFee: env.ADMISSION_FEE ?? 0,
+      monthlyFee: env.MONTHLY_FEE ?? 0,
+    },
+  };
+}
 
 const envSchema = z
   .object({
@@ -16,6 +55,14 @@ const envSchema = z
     MIGRATOR_DATABASE_URL: z.url().optional(),
     MIGRATOR_ROLE_PASSWORD: z.string().min(MIN_PASSWORD_LENGTH).optional(),
     APP_ROLE_PASSWORD: z.string().min(MIN_PASSWORD_LENGTH).optional(),
+    GYM_NAME: z.string().optional(),
+    GYM_SUBDOMAIN: z.string().optional(),
+    GYM_TIMEZONE: z.string().optional(),
+    GYM_CURRENCY: z.string().optional(),
+    OWNER_EMAIL: z.string().optional(),
+    OWNER_NAME: z.string().optional(),
+    ADMISSION_FEE: z.coerce.number().int().min(0).max(MAX_FEE).optional(),
+    MONTHLY_FEE: z.coerce.number().int().min(0).max(MAX_FEE).optional(),
   })
   .transform(
     (env): Config => ({
@@ -35,6 +82,7 @@ const envSchema = z
               appPassword: env.APP_ROLE_PASSWORD,
             },
           }),
+      ...onboardingFrom(env),
     }),
   );
 
@@ -71,5 +119,6 @@ export function redactConfig(config: Config): Record<string, unknown> {
     databaseUrl: REDACTED,
     ...(config.migratorDatabaseUrl === undefined ? {} : { migratorDatabaseUrl: REDACTED }),
     ...(config.rolePasswords === undefined ? {} : { rolePasswords: REDACTED }),
+    ...(config.onboarding === undefined ? {} : { onboarding: REDACTED }),
   };
 }

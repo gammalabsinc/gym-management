@@ -4,6 +4,7 @@ import type { Env } from "../infra/config";
 import type { Database } from "../infra/db/connection";
 import { bootConfig } from "./boot";
 import { composeApp } from "./compose";
+import type { OnboardGym } from "./onboard";
 import { createHttpServer } from "./server";
 import { makeShutdown } from "./shutdown";
 
@@ -16,6 +17,8 @@ export interface RunDeps {
   readonly migrate: (migratorDatabaseUrl: string) => Promise<readonly string[]>;
   /** Creates the database roles and sets their passwords, as the administrator in the url. */
   readonly provision: (adminDatabaseUrl: string, passwords: RolePasswordsConfig) => Promise<void>;
+  /** Adds a gym, as the app role in the url. */
+  readonly onboard: OnboardGym;
   /** Opens the app role pool. */
   readonly connect: (databaseUrl: string) => Promise<Database>;
   /** Registers a handler for a process signal. */
@@ -78,7 +81,28 @@ async function runProvision(config: Config, deps: RunDeps): Promise<null> {
   return null;
 }
 
-/** Boots one process. MODE picks what runs: the api server or a one shot migration or role setup. */
+async function runOnboarding(config: Config, deps: RunDeps): Promise<null> {
+  if (config.onboarding === undefined) {
+    return fail(
+      deps,
+      "GYM_NAME, GYM_SUBDOMAIN, GYM_TIMEZONE, GYM_CURRENCY and OWNER_EMAIL are required when MODE=onboard",
+    );
+  }
+  const result = await deps.onboard(config.databaseUrl, config.onboarding);
+  if (!result.ok) {
+    return fail(
+      deps,
+      `Invalid gym:\n${result.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n")}`,
+    );
+  }
+  const { created, tenantId, subdomain } = result.value;
+  deps.write(
+    JSON.stringify({ msg: created ? "gym created" : "gym already exists", tenantId, subdomain }),
+  );
+  return null;
+}
+
+/** Boots one process. MODE picks what runs: the api server or a one shot migration, role setup or gym onboarding. */
 export async function run(deps: RunDeps): Promise<Server | null> {
   const config = bootConfig(deps);
   switch (config.mode) {
@@ -88,6 +112,8 @@ export async function run(deps: RunDeps): Promise<Server | null> {
       return runMigrations(config, deps);
     case "provision":
       return runProvision(config, deps);
+    case "onboard":
+      return runOnboarding(config, deps);
     case "worker":
       return fail(deps, `MODE=${config.mode} is not implemented yet`);
   }

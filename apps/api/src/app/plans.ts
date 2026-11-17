@@ -1,5 +1,5 @@
 import type { ValidationError } from "../domain/errors";
-import { type DefaultPlanInput, type Plan, parseDefaultPlan } from "../domain/plans";
+import { type DefaultPlanInput, type NewPlan, type Plan, parseDefaultPlan } from "../domain/plans";
 import { ok, type Result } from "../domain/result";
 import type { PlanUnit, WithTenantTx } from "./ports";
 
@@ -31,6 +31,38 @@ export function makeListPlans(deps: PlanDeps) {
 }
 
 /**
+ * Inserts the default plan inside a transaction that is already open, with its audit event, or
+ * reads the plan that is there. Seeding twice changes nothing, so the onboarding job can be rerun.
+ */
+export async function seedPlan(
+  unit: PlanUnit,
+  newPlan: NewPlan,
+  requestId: string,
+): Promise<SeededPlan> {
+  const inserted = await unit.plans.insertIfAbsent(newPlan);
+  if (inserted === null) {
+    const existing = await unit.plans.findByKey(newPlan.key);
+    if (existing === null) throw new Error("The default plan exists but cannot be read");
+    return { plan: existing, created: false };
+  }
+  await unit.audit.record({
+    actorUserId: null,
+    action: PLAN_CREATED,
+    entityType: "plan",
+    entityId: inserted.id,
+    before: null,
+    after: {
+      key: inserted.key,
+      name: inserted.name,
+      admissionFee: inserted.admissionFee,
+      monthlyFee: inserted.monthlyFee,
+    },
+    requestId,
+  });
+  return { plan: inserted, created: true };
+}
+
+/**
  * Gives a new gym its one default plan, for the onboarding job. Running it again for the same gym
  * changes nothing, so onboarding can be repeated. The plan and its audit event commit together.
  */
@@ -42,30 +74,6 @@ export function makeSeedDefaultPlan(deps: PlanDeps) {
     const parsed = parseDefaultPlan(input);
     if (!parsed.ok) return parsed;
     const newPlan = parsed.value;
-    return ok(
-      await deps.withUnit(ctx.tenantId, async (unit) => {
-        const inserted = await unit.plans.insertIfAbsent(newPlan);
-        if (inserted === null) {
-          const existing = await unit.plans.findByKey(newPlan.key);
-          if (existing === null) throw new Error("The default plan exists but cannot be read");
-          return { plan: existing, created: false };
-        }
-        await unit.audit.record({
-          actorUserId: null,
-          action: PLAN_CREATED,
-          entityType: "plan",
-          entityId: inserted.id,
-          before: null,
-          after: {
-            key: inserted.key,
-            name: inserted.name,
-            admissionFee: inserted.admissionFee,
-            monthlyFee: inserted.monthlyFee,
-          },
-          requestId: ctx.requestId,
-        });
-        return { plan: inserted, created: true };
-      }),
-    );
+    return ok(await deps.withUnit(ctx.tenantId, (unit) => seedPlan(unit, newPlan, ctx.requestId)));
   };
 }
