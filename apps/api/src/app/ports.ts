@@ -4,6 +4,7 @@ import type { GymSummary } from "../domain/gym-picker";
 import type { InvoiceDraft } from "../domain/invoice-build";
 import type { MemberCursor } from "../domain/member-list";
 import type { MemberListRow, MemberView } from "../domain/member-view";
+import type { Allocation, NewPayment, PaymentMethod, UnpaidInvoice } from "../domain/payment";
 import type { Role } from "../domain/permissions";
 import type { NewPlan, Plan, PlanFields } from "../domain/plans";
 import type { MembershipStatus } from "../domain/standing";
@@ -494,4 +495,49 @@ export interface SeedPaymentStore {
 export interface SeedPaymentUnit {
   readonly payments: SeedPaymentStore;
   readonly audit: AuditLog;
+}
+
+/** A payment as the database holds it, with the invoices it was allocated to. */
+export interface StoredPayment {
+  readonly id: string;
+  readonly memberId: string;
+  readonly amount: number;
+  readonly method: PaymentMethod;
+  /** The gym's local date the money was received, written YYYY-MM-DD. */
+  readonly paidOn: string;
+  /** When the payment was recorded, an instant in UTC. */
+  readonly submittedAt: string;
+  readonly proofLink: string | null;
+  readonly recordedBy: string;
+  readonly isVoid: boolean;
+  readonly voidReason: string | null;
+  /** Counted or not: the rows the payment wrote, oldest invoice first. */
+  readonly allocations: readonly Allocation[];
+}
+
+export interface NewPaymentRow extends NewPayment {
+  readonly recordedBy: string;
+}
+
+/** The payments of one gym. It belongs to a tenant transaction, so it only ever sees that gym's rows. */
+export interface PaymentStore {
+  /** The payment that carries this request id, or null. The request id is unique per gym. */
+  findByRequestId(clientRequestId: string): Promise<StoredPayment | null>;
+  /**
+   * The member's invoices that are not void and not fully paid, oldest cycle first, with what is
+   * still owed. Allocations of a void payment do not count.
+   */
+  unpaidInvoices(memberId: string): Promise<readonly UnpaidInvoice[]>;
+  /**
+   * Writes the payment. Returns its id and when it was recorded, or null when the request id is
+   * already taken, in which case nothing is written.
+   */
+  insert(row: NewPaymentRow): Promise<{ readonly id: string; readonly submittedAt: string } | null>;
+  /** Writes the rows that settle invoices with the payment. */
+  insertAllocations(paymentId: string, allocations: readonly Allocation[]): Promise<void>;
+}
+
+/** Everything recording a payment needs, all inside one tenant transaction. */
+export interface PaymentUnit extends InvoiceUnit {
+  readonly payments: PaymentStore;
 }
