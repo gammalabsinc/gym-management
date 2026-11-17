@@ -1,12 +1,15 @@
 import type { Server } from "node:http";
 import type { Config, RolePasswordsConfig } from "../app/config";
+import { systemClock } from "../infra/clock";
 import type { Env } from "../infra/config";
 import type { Database } from "../infra/db/connection";
+import { makeLogger } from "../infra/logger";
 import { bootConfig } from "./boot";
 import { composeApp } from "./compose";
 import type { OnboardGym } from "./onboard";
 import { createHttpServer } from "./server";
 import { makeShutdown } from "./shutdown";
+import type { RunWorker } from "./worker";
 
 export interface RunDeps {
   readonly env: Env;
@@ -19,6 +22,8 @@ export interface RunDeps {
   readonly provision: (adminDatabaseUrl: string, passwords: RolePasswordsConfig) => Promise<void>;
   /** Adds a gym, as the app role in the url. */
   readonly onboard: OnboardGym;
+  /** Runs the daily invoice job once, as the app role in the url. */
+  readonly worker: RunWorker;
   /** Opens the app role pool. */
   readonly connect: (databaseUrl: string) => Promise<Database>;
   /** Registers a handler for a process signal. */
@@ -102,6 +107,17 @@ async function runOnboarding(config: Config, deps: RunDeps): Promise<null> {
   return null;
 }
 
+async function runWorker(config: Config, deps: RunDeps): Promise<null> {
+  const logger = makeLogger({ clock: systemClock, write: deps.write, level: config.logLevel });
+  const summary = await deps.worker(config.databaseUrl, logger);
+  deps.write(JSON.stringify({ msg: "invoice top up finished", ...summary }));
+  // A gym or a member that failed is already logged with its id. The exit code tells the scheduler.
+  if (summary.failedTenants > 0) {
+    return fail(deps, `Invoice top up failed for ${summary.failedTenants} gym(s), see the log`);
+  }
+  return null;
+}
+
 /** Boots one process. MODE picks what runs: the api server or a one shot migration, role setup or gym onboarding. */
 export async function run(deps: RunDeps): Promise<Server | null> {
   const config = bootConfig(deps);
@@ -115,6 +131,6 @@ export async function run(deps: RunDeps): Promise<Server | null> {
     case "onboard":
       return runOnboarding(config, deps);
     case "worker":
-      return fail(deps, `MODE=${config.mode} is not implemented yet`);
+      return runWorker(config, deps);
   }
 }

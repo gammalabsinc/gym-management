@@ -1,5 +1,5 @@
 import type { DateText } from "../domain/billing-cycle";
-import { localDateIn } from "../domain/calendar";
+import { addDays, localDateIn } from "../domain/calendar";
 import type { Discount } from "../domain/discounts";
 import { type NotFoundError, notFound, type ValidationError } from "../domain/errors";
 import { buildInvoice, cyclesToGenerate } from "../domain/invoice-build";
@@ -60,6 +60,11 @@ export interface GenerateInUnitInput {
   /** A member id that is already a valid uuid. */
   readonly memberId: string;
   readonly ahead: number;
+  /**
+   * Counts today this many days later, so a cycle that starts within that many days is built now.
+   * The daily job passes the gym's warning window. Left out, it is today.
+   */
+  readonly lookAheadDays?: number | undefined;
 }
 
 /**
@@ -85,7 +90,7 @@ export async function generateInvoicesInUnit(
     billingDay: member.billingDay,
     activeFrom: member.activeFrom,
     lastPeriodEnd,
-    today: localDateIn(clock.now(), tenant.timezone),
+    today: addDays(localDateIn(clock.now(), tenant.timezone), input.lookAheadDays ?? 0),
     ahead: input.ahead,
   });
   if (!cycles.ok) return cycles;

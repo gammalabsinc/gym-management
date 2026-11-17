@@ -56,6 +56,13 @@ export function nextDate(text: string): string {
   return `${pad(parts.year, 4)}-${pad(parts.month, 2)}-${pad(parts.day, 2)}`;
 }
 
+/** The calendar date `days` days after a real calendar date, for a whole number of days from 0. */
+export function addDays(text: string, days: number): string {
+  let date = text;
+  for (let day = 0; day < days; day += 1) date = nextDate(date);
+  return date;
+}
+
 /**
  * The calendar date of an instant in an IANA time zone, written YYYY-MM-DD. Every billing date is
  * the gym's local date, never the UTC date. The zone comes from the tenant row, so an unknown zone

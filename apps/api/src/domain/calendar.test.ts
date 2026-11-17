@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addDays,
   daysBetween,
   daysInMonth,
   isCalendarDate,
@@ -107,6 +108,16 @@ describe("nextDate", () => {
 
   it("rolls over the end of a year", () => {
     expect(nextDate("2026-12-31")).toBe("2027-01-01");
+  });
+});
+
+describe("addDays", () => {
+  it("adds whole days across month, year and leap day boundaries", () => {
+    expect(addDays("2026-11-16", 0)).toBe("2026-11-16");
+    expect(addDays("2026-11-16", 5)).toBe("2026-11-21");
+    expect(addDays("2026-11-28", 5)).toBe("2026-12-03");
+    expect(addDays("2026-12-30", 3)).toBe("2027-01-02");
+    expect(addDays("2028-02-27", 3)).toBe("2028-03-01");
   });
 });
 

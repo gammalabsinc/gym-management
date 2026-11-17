@@ -351,3 +351,30 @@ export interface MemberUnit {
   readonly tenants: Pick<TenantStore, "find">;
   readonly audit: AuditLog;
 }
+
+/** The gyms a job works through. The tenants table is not tenant scoped. */
+export interface TenantRegistry {
+  /** Every gym that is switched on, in a fixed order. */
+  activeTenantIds(): Promise<readonly string[]>;
+}
+
+export type Exclusive<T> = { readonly ran: true; readonly value: T } | { readonly ran: false };
+
+/** Keeps two workers from doing the same job for the same gym at the same time. */
+export interface TenantJobLock {
+  /**
+   * Runs `fn` when no other worker holds this gym's lock, and gives the lock back afterwards,
+   * even when `fn` throws. Returns `ran: false` at once, without waiting, when the lock is taken.
+   */
+  runExclusive<T>(tenantId: string, fn: () => Promise<T>): Promise<Exclusive<T>>;
+}
+
+/** Who has an active membership right now, in one gym. It belongs to a tenant transaction. */
+export interface MemberRoster {
+  activeMemberIds(): Promise<readonly string[]>;
+}
+
+/** Everything the daily invoice job needs for one member, all inside one tenant transaction. */
+export interface TopUpUnit extends InvoiceUnit {
+  readonly roster: MemberRoster;
+}
