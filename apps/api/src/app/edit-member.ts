@@ -25,6 +25,7 @@ export interface EditedMember {
   readonly memberId: string;
   readonly name: string | null;
   readonly phone: string | null;
+  readonly photoRef: string | null;
   /** False when every sent value was already what is stored, so nothing was written. */
   readonly changed: boolean;
 }
@@ -38,6 +39,9 @@ function effectiveChange(current: MemberProfile, change: ProfileChange): Profile
     ...(change.phone !== undefined && change.phone !== current.phone
       ? { phone: change.phone }
       : {}),
+    ...(change.photoRef !== undefined && change.photoRef !== current.photoRef
+      ? { photoRef: change.photoRef }
+      : {}),
   };
 }
 
@@ -45,11 +49,12 @@ function snapshot(profile: MemberProfile, fields: ProfileChange) {
   return {
     ...(fields.name !== undefined ? { name: profile.name } : {}),
     ...(fields.phone !== undefined ? { phone: profile.phone } : {}),
+    ...(fields.photoRef !== undefined ? { photoRef: profile.photoRef } : {}),
   };
 }
 
 /**
- * Edits the name and phone of a member. The allow list is checked in the domain, so member_no,
+ * Edits the name, phone and photo reference of a member. The allow list is checked in the domain, so member_no,
  * barcode, email, plan, join date and referrer can never change here. The member's user row is
  * locked while it is read and written. An edit that changes nothing writes nothing, not even an
  * audit event. The change and its audit event commit together.
@@ -58,7 +63,7 @@ export function makeEditMember(deps: EditMemberDeps) {
   return requirePermission<MemberProfileEditInput, EditMemberContext, EditedMember, EditError>(
     "member.update",
     async (input, ctx) => {
-      const parsed = parseProfileEdit(input);
+      const parsed = parseProfileEdit(input, ctx.tenantId);
       if (!parsed.ok) return parsed;
       const { memberId, change } = parsed.value;
       return deps.withUnit(ctx.tenantId, async (unit): Promise<Result<EditedMember, EditError>> => {
@@ -68,6 +73,7 @@ export function makeEditMember(deps: EditMemberDeps) {
         const next = {
           name: effective.name ?? current.name,
           phone: effective.phone === undefined ? current.phone : effective.phone,
+          photoRef: effective.photoRef === undefined ? current.photoRef : effective.photoRef,
         };
         if (Object.keys(effective).length === 0) return ok({ memberId, ...next, changed: false });
 

@@ -101,8 +101,10 @@ describe("member codes", () => {
 
 describe("parseProfileEdit", () => {
   const MEMBER_ID = "55555555-5555-4555-8555-555555555555";
+  const TENANT_ID = "22222222-2222-4222-8222-222222222222";
+  const PHOTO = `${TENANT_ID}/members/66666666-6666-4666-8666-666666666666.jpg`;
   const edit = (fields: Record<string, unknown>, memberId = MEMBER_ID) =>
-    parseProfileEdit({ memberId, fields });
+    parseProfileEdit({ memberId, fields }, TENANT_ID);
 
   it("accepts a name and a phone, trimmed", () => {
     expect(edit({ name: "  Ada ", phone: " 416-555-0100 " })).toEqual({
@@ -128,6 +130,42 @@ describe("parseProfileEdit", () => {
         ok: true,
         value: { memberId: MEMBER_ID, change: { phone: null } },
       });
+    }
+  });
+
+  it("accepts a photo reference of this gym, trimmed", () => {
+    for (const ext of ["jpg", "png", "webp"]) {
+      const ref = PHOTO.replace(".jpg", `.${ext}`);
+      expect(edit({ photoRef: ` ${ref} ` })).toEqual({
+        ok: true,
+        value: { memberId: MEMBER_ID, change: { photoRef: ref } },
+      });
+    }
+  });
+
+  it("removes the photo with null or an empty string", () => {
+    for (const photoRef of [null, "  "]) {
+      expect(edit({ photoRef })).toEqual({
+        ok: true,
+        value: { memberId: MEMBER_ID, change: { photoRef: null } },
+      });
+    }
+  });
+
+  it("refuses a photo reference of another gym or of the wrong shape", () => {
+    const other = PHOTO.replace(TENANT_ID, "99999999-9999-4999-8999-999999999999");
+    const bad = [
+      other,
+      PHOTO.replace("/members/", "/other/"),
+      PHOTO.replace(".jpg", ".gif"),
+      PHOTO.replace("66666666-6666-4666-8666-666666666666", "../secret"),
+      `x${PHOTO}`,
+      `${PHOTO}?x=1`,
+      "https://example.test/a.jpg",
+    ];
+    for (const photoRef of bad) {
+      const result = edit({ photoRef });
+      expect(!result.ok && result.error.issues.map((issue) => issue.path)).toEqual([["photoRef"]]);
     }
   });
 
@@ -170,10 +208,11 @@ describe("parseProfileEdit", () => {
   });
 
   it("requires text where text is expected", () => {
-    const result = edit({ name: 5, phone: 7 });
+    const result = edit({ name: 5, phone: 7, photoRef: 9 });
     expect(!result.ok && result.error.issues).toEqual([
       { path: ["name"], message: "Must be text" },
       { path: ["phone"], message: "Must be text" },
+      { path: ["photoRef"], message: "Must be text" },
     ]);
   });
 

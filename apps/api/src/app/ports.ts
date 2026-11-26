@@ -412,6 +412,7 @@ export interface MemberProfile {
   readonly userId: string;
   readonly name: string | null;
   readonly phone: string | null;
+  readonly photoRef: string | null;
 }
 
 /** The profiles of one gym. It belongs to a tenant transaction. */
@@ -420,7 +421,11 @@ export interface ProfileStore {
   lock(memberId: string): Promise<MemberProfile | null>;
   update(
     userId: string,
-    change: { readonly name?: string; readonly phone?: string | null },
+    change: {
+      readonly name?: string;
+      readonly phone?: string | null;
+      readonly photoRef?: string | null;
+    },
   ): Promise<void>;
 }
 
