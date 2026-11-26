@@ -1,5 +1,6 @@
 import type { RequestSession } from "../app/request-session";
 import { parseBearerToken } from "../domain/session";
+import type { RequestLoaders } from "./loaders";
 import type { RequestContext, RequestContextInput } from "./request-context";
 
 /** Who is calling. A session is an identity session until the person picks a gym. */
@@ -14,12 +15,16 @@ export interface GraphQLContext {
   readonly token: string | null;
   /** Always taken from the session, never from client input. */
   readonly tenantId: string | null;
+  /** The lookups of this request, tied to the session gym. Null without a gym. */
+  readonly loaders: RequestLoaders | null;
   readonly logger: RequestContext["logger"];
 }
 
 export interface ContextDeps {
   readonly resolveSession: SessionResolver;
   readonly requestContext: (input: RequestContextInput) => RequestContext;
+  /** Builds the loaders of one request for one gym. Left out where no data is read. */
+  readonly loaders?: (tenantId: string) => RequestLoaders;
 }
 
 const REQUEST_ID_HEADER = "x-request-id";
@@ -51,6 +56,7 @@ export function makeContextBuilder(
       session,
       token: parseBearerToken(request.headers.get(AUTHORIZATION_HEADER)),
       tenantId,
+      loaders: tenantId === null || deps.loaders === undefined ? null : deps.loaders(tenantId),
       logger,
     };
   };

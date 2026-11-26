@@ -1,10 +1,22 @@
-import type { ErrorCode, Gym, Me, Tenant, UserError } from "@gym/graphql-schema";
+import type {
+  ErrorCode,
+  Gym,
+  Me,
+  Member,
+  MemberPage,
+  Plan,
+  Tenant,
+  UserError,
+} from "@gym/graphql-schema";
 import { GraphQLError } from "graphql";
+import type { MemberPage as MemberPageResult } from "../app/member-queries";
 import type { TenantView } from "../app/tenant-settings";
 import type { Me as MeRecord } from "../app/who-am-i";
 import type { DomainError, DomainErrorKind } from "../domain/errors";
 import type { GymSummary } from "../domain/gym-picker";
+import type { MemberView } from "../domain/member-view";
 import type { Role } from "../domain/permissions";
+import type { Plan as PlanRecord } from "../domain/plans";
 import { ERROR_CODE_BY_KIND } from "./errors";
 
 type GqlRole = Gym["roles"][number];
@@ -67,4 +79,52 @@ export function toGraphQLError(error: DomainError): GraphQLError {
   return new GraphQLError(error.message, {
     extensions: { code: ERROR_CODE_BY_KIND[error.kind] },
   });
+}
+
+export function toGqlPlan(plan: PlanRecord): Plan {
+  return {
+    id: plan.id,
+    key: plan.key,
+    name: plan.name,
+    admissionFee: plan.admissionFee,
+    monthlyFee: plan.monthlyFee,
+    isActive: plan.isActive,
+  };
+}
+
+/** The id of the member who referred each mapped member, for the field that loads the referrer. */
+const referrerIds = new WeakMap<object, string>();
+
+export function referrerIdOf(member: Member): string | null {
+  return referrerIds.get(member) ?? null;
+}
+
+export function toGqlMember(view: MemberView): Member {
+  const member: Member = {
+    id: view.id,
+    memberNo: view.memberNo,
+    barcode: view.barcode,
+    name: view.name,
+    email: view.email,
+    phone: view.phone,
+    photoRef: view.photoRef,
+    status: view.status.toUpperCase() as Member["status"],
+    plan: toGqlPlan(view.plan),
+    joinedOn: view.joinedOn,
+    leftOn: view.leftOn,
+    billingDay: view.billingDay,
+    paidThrough: view.paidThrough,
+    standing: view.standing.toUpperCase() as Member["standing"],
+    balanceDue: view.balanceDue,
+    credit: view.credit,
+    visitsThisMonth: view.visitsThisMonth,
+    visitsLastMonth: view.visitsLastMonth,
+    totalPaid: view.totalPaid,
+  };
+  if (view.referredBy !== null) referrerIds.set(member, view.referredBy);
+  return member;
+}
+
+export function toGqlMemberPage(page: MemberPageResult): MemberPage {
+  return { items: page.items.map(toGqlMember), nextCursor: page.nextCursor };
 }

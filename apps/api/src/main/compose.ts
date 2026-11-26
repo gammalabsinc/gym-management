@@ -1,6 +1,7 @@
 import { bearerSessionResolver, makeContextBuilder } from "../api/context";
 import { makeGraphqlHandler } from "../api/graphql";
 import { makeGreetingResolver } from "../api/greeting";
+import { makeRequestLoaders } from "../api/loaders";
 import { makeRequestContextBuilder } from "../api/request-context";
 import type { ResolverDeps } from "../api/resolvers";
 import type { Config } from "../app/config";
@@ -9,6 +10,9 @@ import type { VerifyGoogleIdToken } from "../app/google-sign-in";
 import { makeGreet } from "../app/greet";
 import { makeFindMembership } from "../app/gym-membership";
 import { makeListMyGyms } from "../app/gym-picker";
+import { makeGetMember, makeListMembers } from "../app/member-queries";
+import { makeGetOwnMember } from "../app/member-self-service";
+import { makeListPlans } from "../app/plans";
 import { makeRateLimiter } from "../app/rate-limit";
 import { makeResolveRequestSession } from "../app/request-session";
 import { makeSelectGym } from "../app/select-gym";
@@ -22,6 +26,10 @@ import { makeAccountDirectory, makeAccountLookup } from "../infra/google/account
 import { makeGoogleIdTokenVerifier } from "../infra/google/verify-id-token";
 import { uuidGenerator } from "../infra/ids";
 import { makeLogger } from "../infra/logger";
+import { makeWithLoaderUnit } from "../infra/members/loader-unit";
+import { makeWithMemberQueryUnit } from "../infra/members/member-queries-unit";
+import { makeWithMemberSelfUnit } from "../infra/members/member-self-unit";
+import { makeWithPlanUnit } from "../infra/plans/plans-unit";
 import { expiresAfter } from "../infra/sessions/session-lifetime";
 import { sessionTokens } from "../infra/sessions/session-tokens";
 import { makeSessionStore } from "../infra/sessions/sessions-sql";
@@ -84,23 +92,45 @@ export function composeApp(deps: ComposeDeps) {
     clock: systemClock,
     ids: uuidGenerator,
   });
+  const whoAmI = makeWhoAmI({ withUnit: makeWithWhoAmIUnit(withTenantTx) });
+  const memberQueries = {
+    withUnit: makeWithMemberQueryUnit(withTenantTx),
+    clock: systemClock,
+  };
+  const withLoaderUnit = makeWithLoaderUnit(withTenantTx);
+  const getTenant = makeGetTenant({ withUnit: withSettingsUnit });
   const resolvers: ResolverDeps = {
     signIn: makeSignIn({ google: { verify, accounts }, sessions, listMyGyms }),
     signOut: (token) => sessions.signOut(token),
     listMyGyms,
-    whoAmI: makeWhoAmI({ withUnit: makeWithWhoAmIUnit(withTenantTx) }),
+    whoAmI,
     enterGym: makeEnterGym({
       selectGym,
       findMembership,
-      whoAmI: makeWhoAmI({ withUnit: makeWithWhoAmIUnit(withTenantTx) }),
-      getTenant: makeGetTenant({ withUnit: withSettingsUnit }),
+      whoAmI,
+      getTenant,
       newRequestId: () => uuidGenerator.next(),
+    }),
+    getTenant,
+    listPlans: makeListPlans({
+      withUnit: makeWithPlanUnit(withTenantTx, { clock: systemClock, ids: uuidGenerator }),
+    }),
+    listMembers: makeListMembers(memberQueries),
+    getMember: makeGetMember(memberQueries),
+    getOwnMember: makeGetOwnMember({
+      withUnit: makeWithMemberSelfUnit(withTenantTx),
+      clock: systemClock,
     }),
   };
   const resolveSession = bearerSessionResolver(
     makeResolveRequestSession({ sessions, findMembership }),
   );
-  const buildContext = makeContextBuilder({ resolveSession, requestContext });
+  const buildContext = makeContextBuilder({
+    resolveSession,
+    requestContext,
+    loaders: (tenantId) =>
+      makeRequestLoaders({ withUnit: withLoaderUnit, clock: systemClock }, tenantId),
+  });
   return {
     logger,
     greeting: makeGreetingResolver(greet),

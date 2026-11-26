@@ -11,6 +11,7 @@ const context: GraphQLContext = {
   requestId: "r1",
   session: null,
   token: null,
+  loaders: null,
   tenantId: null,
   logger,
 };
