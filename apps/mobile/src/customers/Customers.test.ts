@@ -3,6 +3,8 @@ import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Customers, SEARCH_DELAY_MS } from "./Customers";
 import { CustomersProvider, useCustomersService } from "./context";
+import { DetailProvider } from "./detail/context";
+import type { DetailService } from "./detail/service";
 import type { CustomerPage, CustomerRow, CustomersService } from "./list";
 import { useCustomers } from "./useCustomers";
 
@@ -32,9 +34,31 @@ const ok = (items: CustomerRow[], nextCursor: string | null = null): CustomerPag
   nextCursor,
 });
 
+const detail: DetailService = {
+  header: async () => ({ status: "failed", message: "Detail is tested on its own" }),
+  invoices: () => async () => ({ status: "page", items: [], nextCursor: null }),
+  payments: () => async () => ({ status: "page", items: [], nextCursor: null }),
+  visits: () => async () => ({ status: "page", items: [], nextCursor: null }),
+  discounts: () => async () => ({ status: "page", items: [], nextCursor: null }),
+  history: () => async () => ({ status: "page", items: [], nextCursor: null }),
+  changeStatus: async () => ({ status: "done" }),
+  voidPayment: async () => ({ status: "done" }),
+  voidInvoice: async () => ({ status: "done" }),
+};
+
 function mount(fetch: CustomersService["fetch"]) {
   const service = { fetch: vi.fn(fetch) };
-  const view = render(createElement(CustomersProvider, { service }, createElement(Customers)));
+  const view = render(
+    createElement(
+      CustomersProvider,
+      { service },
+      createElement(
+        DetailProvider,
+        { service: detail },
+        createElement(Customers, { viewer: "staff" }),
+      ),
+    ),
+  );
   return { service, view };
 }
 
@@ -90,9 +114,8 @@ describe("Customers", () => {
     mount(async () => ok([row("a")]));
     await settle();
     fireEvent.click(screen.getByLabelText("Open Person a"));
-    expect(screen.getByText("This screen is built in a later ticket.")).toBeTruthy();
-    fireEvent.click(screen.getByLabelText("Back to customers"));
-    expect(screen.getByText("Person a")).toBeTruthy();
+    await settle();
+    expect(screen.getByText("Detail is tested on its own")).toBeTruthy();
   });
 
   it("has an Add button in the header", async () => {

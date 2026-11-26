@@ -9,6 +9,7 @@ import { createCardCache, type KeyValueLike } from "./card/cache";
 import { createCardService } from "./card/card";
 import type { CardDeps } from "./card/context";
 import type { RuntimeConfig } from "./config/build-config";
+import { createDetailService, type DetailService } from "./customers/detail/service";
 import type { CustomersService } from "./customers/list";
 import { createCustomersService } from "./customers/list";
 import { createGyms, type Gyms } from "./gyms";
@@ -42,6 +43,7 @@ export interface Services {
   readonly staff: StaffService;
   readonly attendance: AttendanceService;
   readonly profile: ProfileService;
+  readonly detail: DetailService;
 }
 
 export function newRequestId(): string {
@@ -97,5 +99,6 @@ export function composeServices(
     staff: createStaffService({ client }),
     attendance: createAttendanceService({ client }),
     profile: createProfileService({ client }),
+    detail: createDetailService({ client }),
   };
 }
