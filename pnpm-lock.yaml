@@ -69,6 +69,9 @@ importers:
       '@gym/graphql-schema':
         specifier: workspace:*
         version: link:../../packages/graphql-schema
+      '@react-native-google-signin/google-signin':
+        specifier: ^17.0.0
+        version: 17.0.0(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
       '@react-navigation/bottom-tabs':
         specifier: ^7.21.0
         version: 7.21.0(@react-navigation/native@7.5.1(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native-safe-area-context@5.11.1(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native-screens@4.30.1(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -81,6 +84,9 @@ importers:
       expo-constants:
         specifier: ~58.0.16
         version: 58.0.16(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(typescript@7.0.2)
+      expo-secure-store:
+        specifier: ^58.0.3
+        version: 58.0.3(expo@58.0.25)
       expo-status-bar:
         specifier: ~58.0.5
         version: 58.0.5(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -1547,6 +1553,16 @@ packages:
   '@oxc-project/types@0.156.0':
     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
 
+  '@react-native-google-signin/google-signin@17.0.0':
+    resolution: {integrity: sha512-FAnq5tkoq01np7jCzGjBYK1QPS61hJxjLJHJyJjQN3gaTwAZiGll18Xn3nygITMsZ/WoJ0jmskuHSG/oknUskQ==}
+    peerDependencies:
+      expo: '>=52.0.40'
+      react: '*'
+      react-native: '*'
+    peerDependenciesMeta:
+      expo:
+        optional: true
+
   '@react-native/asset-utils@0.88.1':
     resolution: {integrity: sha512-BLb5FF7NgggGYiCsA7KKkK2qFhn0K+6iGXOI+4Ucd+G7Robzw9Gt4WsWwxLt+Od+G+/hyqfz8ASokyWFZ6VcLw==}
     engines: {node: ^22.13.0 || ^24.3.0 || >= 26.0.0}
@@ -2595,6 +2611,11 @@ packages:
 
   expo-modules-macros@0.33.0:
     resolution: {integrity: sha512-ddrT2jbYPYmiHmzcYOixRemFUUK9qQEb5pOBWgoFoW0gj3sGld1CZX0GwblUXeZMyEX65S9vc1bEhIAGVDRA9w==}
+
+  expo-secure-store@58.0.3:
+    resolution: {integrity: sha512-RpubZfqJREEcwKbx3HFoWbtDd31t+yESMj7Ei5/mGQp5vViwUBzL4nUCZRLFyt+O690mT8We7dDtIUZeIk6LbQ==}
+    peerDependencies:
+      expo: '*'
 
   expo-server@58.1.0:
     resolution: {integrity: sha512-jo7I6uHnP5OQYKx3+7lbpdVVnOEwFj2ryDkQdauUQSwgh2HuMUkiFXWUIVe01ts6DLRoff5U0Tv+uNb3CMq/kw==}
@@ -6062,6 +6083,13 @@ snapshots:
 
   '@oxc-project/types@0.156.0': {}
 
+  '@react-native-google-signin/google-signin@17.0.0(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+      react-native: 0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0)
+    optionalDependencies:
+      expo: 58.0.25(@babel/core@8.1.2)(@expo/dom-webview@58.0.2)(react-dom@19.3.0(react@19.3.0))(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@7.0.2)
+
   '@react-native/asset-utils@0.88.1': {}
 
   '@react-native/babel-plugin-codegen@0.88.1(@babel/core@8.1.2)':
@@ -7041,6 +7069,10 @@ snapshots:
       '@expo/modules-macros-linux-x64': 0.33.0
       '@expo/modules-macros-win32-arm64': 0.33.0
       '@expo/modules-macros-win32-x64': 0.33.0
+
+  expo-secure-store@58.0.3(expo@58.0.25):
+    dependencies:
+      expo: 58.0.25(@babel/core@8.1.2)(@expo/dom-webview@58.0.2)(react-dom@19.3.0(react@19.3.0))(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@7.0.2)
 
   expo-server@58.1.0: {}
 

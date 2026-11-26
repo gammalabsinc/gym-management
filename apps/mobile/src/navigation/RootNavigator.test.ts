@@ -5,6 +5,9 @@ import { SIGNED_OUT } from "../auth/session";
 
 // The navigation libraries need the native runtime. Replace them with plain wrappers,
 // so these tests cover our own gate and tab wiring.
+vi.mock("../screens/SignIn", () => ({
+  SignIn: () => createElement("div", null, "Sign in screen"),
+}));
 vi.mock("@react-navigation/native", () => ({
   NavigationContainer: (props: { children: ReactNode }) =>
     createElement("div", { "data-testid": "nav" }, props.children),
@@ -29,10 +32,15 @@ beforeAll(async () => {
 });
 
 describe("RootNavigator", () => {
-  it("shows the sign in placeholder when signed out", () => {
+  it("shows sign in when signed out", () => {
     render(createElement(RootNavigator, { session: SIGNED_OUT }));
-    expect(screen.getByText("Sign in")).toBeTruthy();
+    expect(screen.getByText("Sign in screen")).toBeTruthy();
     expect(screen.queryByTestId("tabs")).toBeNull();
+  });
+
+  it("shows the gym picker after Google sign in", () => {
+    render(createElement(RootNavigator, { session: { status: "identity" } }));
+    expect(screen.getByText("Pick a gym")).toBeTruthy();
   });
 
   it("shows the customer tabs for a member", () => {

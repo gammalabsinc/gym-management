@@ -1,17 +1,18 @@
 import { StatusBar } from "expo-status-bar";
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
-import { createClient } from "./api/client";
 import { ClientProvider } from "./api/hooks";
-import { createSessionStore, type SessionStore } from "./auth/session-store";
+import { AuthProvider } from "./auth/context";
 import { ConfigError, type RuntimeConfig } from "./config/build-config";
 import { ConfigProvider } from "./config/context";
 import { type ConstantsLike, loadRuntimeConfig } from "./config/load";
 import { ProfileMarker } from "./config/ProfileMarker";
 import { RootNavigator } from "./navigation/RootNavigator";
+import { composeServices, type Platform } from "./services";
 
 export interface AppProps {
   readonly constants: ConstantsLike;
+  readonly platform: Platform;
 }
 
 type ConfigResult =
@@ -27,29 +28,30 @@ function readConfig(constants: ConstantsLike): ConfigResult {
   }
 }
 
-function newRequestId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function Authenticated(props: { readonly config: RuntimeConfig }) {
-  const store: SessionStore = useMemo(() => createSessionStore(), []);
-  const client = useMemo(
-    () =>
-      createClient({
-        apiUrl: props.config.apiUrl,
-        getToken: store.getToken,
-        onUnauthenticated: store.signOut,
-        newRequestId,
-        fetch: (input, init) => fetch(input, init),
-      }),
-    [props.config.apiUrl, store],
+function Authenticated(props: { readonly config: RuntimeConfig; readonly platform: Platform }) {
+  const { config, platform } = props;
+  const services = useMemo(
+    () => composeServices(config, platform, (input, init) => fetch(input, init)),
+    [config, platform],
   );
-  const session = useSyncExternalStore(store.subscribe, store.getSession);
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    let current = true;
+    services.auth.restore().then(() => {
+      if (current) setRestored(true);
+    });
+    return () => {
+      current = false;
+    };
+  }, [services]);
+  const session = useSyncExternalStore(services.store.subscribe, services.store.getSession);
   return (
-    <ClientProvider client={client}>
-      <StatusBar style="auto" />
-      <ProfileMarker profile={props.config.profile} />
-      <RootNavigator session={session} />
+    <ClientProvider client={services.client}>
+      <AuthProvider auth={services.auth}>
+        <StatusBar style="auto" />
+        <ProfileMarker profile={config.profile} />
+        {restored ? <RootNavigator session={session} /> : null}
+      </AuthProvider>
     </ClientProvider>
   );
 }
@@ -65,7 +67,7 @@ export function App(props: AppProps) {
   }
   return (
     <ConfigProvider config={result.config}>
-      <Authenticated config={result.config} />
+      <Authenticated config={result.config} platform={props.platform} />
     </ConfigProvider>
   );
 }

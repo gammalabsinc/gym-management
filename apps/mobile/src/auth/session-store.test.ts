@@ -18,6 +18,15 @@ describe("createSessionStore", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it("holds an identity session with the token until a gym is picked", () => {
+    const store = createSessionStore();
+    store.signInIdentity("tok");
+    expect(store.getSession()).toEqual({ status: "identity" });
+    expect(store.getToken()).toBe("tok");
+    store.signIn("tok2", "member");
+    expect(store.getSession()).toEqual({ status: "signedIn", role: "member" });
+  });
+
   it("sign out clears the token and notifies once, and is a no-op when already signed out", () => {
     const store = createSessionStore();
     const listener = vi.fn();
