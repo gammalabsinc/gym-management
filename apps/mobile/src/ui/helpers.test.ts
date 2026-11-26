@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { luminance, safeBrand, textOn } from "./contrast";
-import { formatDate, formatDateTime, initials } from "./dates";
+import { formatDate, formatDateTime, formatDay, formatMonth, formatTime, initials } from "./dates";
 import { currencyExponent, formatMoney } from "./money";
 import { DEFAULT_BRAND, MIN_TOUCH } from "./tokens";
 
@@ -77,6 +77,23 @@ describe("dates", () => {
 
   it("rejects an instant it cannot parse", () => {
     expect(() => formatDateTime("later", "UTC")).toThrow(RangeError);
+    expect(() => formatTime("later", "UTC")).toThrow(RangeError);
+  });
+
+  it("formats a month, a day and a time of day", () => {
+    expect(formatMonth("2026-12")).toBe("December 2026");
+    expect(formatMonth("2026-01-31")).toBe("January 2026");
+    expect(formatDay("2026-12-13")).toBe("Sun Dec 13");
+    expect(formatDay("2026-11-05")).toBe("Thu Nov 5");
+    expect(formatTime("2026-10-02T23:30:00Z", "UTC")).toBe("11:30 PM");
+    expect(formatTime("2026-10-02T23:30:00Z", "Asia/Karachi")).toBe("4:30 AM");
+  });
+
+  it("rejects a month or a day it cannot read", () => {
+    expect(() => formatMonth("2026-13")).toThrow(RangeError);
+    expect(() => formatMonth("December")).toThrow(RangeError);
+    expect(() => formatDay("2026-13-01")).toThrow(RangeError);
+    expect(() => formatDay("Dec 13")).toThrow(RangeError);
   });
 });
 
