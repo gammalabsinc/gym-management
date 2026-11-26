@@ -33,6 +33,10 @@ export function View(props: Props) {
   return <div {...shared(props)}>{props.children}</div>;
 }
 
+export function ScrollView(props: Props) {
+  return <div {...shared(props)}>{props.children}</div>;
+}
+
 export function Text(props: Props) {
   return <span {...shared(props)}>{props.children}</span>;
 }

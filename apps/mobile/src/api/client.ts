@@ -13,6 +13,8 @@ export interface ClientDeps {
   readonly getToken: () => string | null;
   /** Called when the server says the session is expired or revoked. */
   readonly onUnauthenticated: () => void;
+  /** Called when the server says this person may not do that. The gym may have been taken away. */
+  readonly onForbidden?: () => void;
   readonly newRequestId: () => string;
   readonly fetch: typeof fetch;
 }
@@ -78,6 +80,7 @@ export function createClient(deps: ClientDeps): Client {
                 requestId,
               );
         if (error.code === "UNAUTHENTICATED") deps.onUnauthenticated();
+        if (error.code === "FORBIDDEN") deps.onForbidden?.();
         return { status: "error", error };
       }
       const data = body?.data ?? null;

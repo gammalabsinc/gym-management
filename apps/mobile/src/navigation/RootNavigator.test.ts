@@ -5,6 +5,9 @@ import { SIGNED_OUT } from "../auth/session";
 
 // The navigation libraries need the native runtime. Replace them with plain wrappers,
 // so these tests cover our own gate and tab wiring.
+vi.mock("../screens/GymPicker", () => ({
+  GymPicker: () => createElement("div", null, "Pick a gym"),
+}));
 vi.mock("../screens/SignIn", () => ({
   SignIn: () => createElement("div", null, "Sign in screen"),
 }));
@@ -55,5 +58,15 @@ describe("RootNavigator", () => {
     expect(screen.getByTestId("tab-Scan")).toBeTruthy();
     expect(screen.getByTestId("tab-Customers")).toBeTruthy();
     expect(screen.queryByTestId("tab-Card")).toBeNull();
+  });
+
+  it("gives an owner the Settings and Staff tabs and staff neither", () => {
+    render(createElement(RootNavigator, { session: { status: "signedIn", role: "owner" } }));
+    expect(screen.getByTestId("tab-Settings")).toBeTruthy();
+    expect(screen.getByTestId("tab-Staff")).toBeTruthy();
+    cleanup();
+    render(createElement(RootNavigator, { session: { status: "signedIn", role: "staff" } }));
+    expect(screen.queryByTestId("tab-Settings")).toBeNull();
+    expect(screen.queryByTestId("tab-Staff")).toBeNull();
   });
 });

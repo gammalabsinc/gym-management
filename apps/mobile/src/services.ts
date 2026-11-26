@@ -4,6 +4,7 @@ import { createGoogleSignIn, type GoogleSigninLike } from "./auth/google";
 import { createSessionStore, type SessionStore } from "./auth/session-store";
 import { createSecureTokenStorage, type SecureStoreLike } from "./auth/token-storage";
 import type { RuntimeConfig } from "./config/build-config";
+import { createGyms, type Gyms } from "./gyms";
 
 /** The native pieces, passed in from the entry point so tests need no native module. */
 export interface Platform {
@@ -17,6 +18,7 @@ export interface Services {
   readonly store: SessionStore;
   readonly client: Client;
   readonly auth: Auth;
+  readonly gyms: Gyms;
 }
 
 export function newRequestId(): string {
@@ -31,11 +33,15 @@ export function composeServices(
   const store = createSessionStore();
   // The client reports a dead session to auth, and auth uses the client to sign in and out.
   let auth: Auth | null = null;
+  let gyms: Gyms | null = null;
   const client = createClient({
     apiUrl: config.apiUrl,
     getToken: store.getToken,
     onUnauthenticated: () => {
       void auth?.expire();
+    },
+    onForbidden: () => {
+      void gyms?.recheck();
     },
     newRequestId,
     fetch: fetchImpl,
@@ -49,5 +55,6 @@ export function composeServices(
     }),
     store,
   });
-  return { store, client, auth };
+  gyms = createGyms({ client, store });
+  return { store, client, auth, gyms };
 }
