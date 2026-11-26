@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CameraPermission, CameraPort } from "./camera";
 import { ScannerProvider, useScannerDeps } from "./context";
 import { Scanner } from "./Scanner";
-import type { ScanOutcome } from "./scan";
+import type { FirstCheckIn, ScanOutcome } from "./scan";
 
 const focus = vi.hoisted(() => ({ focused: true }));
 vi.mock("@react-navigation/native", () => ({ useIsFocused: () => focus.focused }));
@@ -32,7 +32,11 @@ function NullScanner() {
   return null;
 }
 
-function setup(status: CameraPermission, record: (code: string) => Promise<ScanOutcome>) {
+function setup(
+  status: CameraPermission,
+  record: (code: string) => Promise<ScanOutcome>,
+  firstCheckIn: (memberId: string) => Promise<FirstCheckIn> = async () => ({ status: "unknown" }),
+) {
   const request = vi.fn();
   const openSettings = vi.fn(async () => undefined);
   const camera: CameraPort = {
@@ -40,7 +44,7 @@ function setup(status: CameraPermission, record: (code: string) => Promise<ScanO
     Scanner: FakeScanner,
     openSettings,
   };
-  const service = { record: vi.fn(record) };
+  const service = { record: vi.fn(record), firstCheckIn: vi.fn(firstCheckIn) };
   const view = render(
     createElement(ScannerProvider, { deps: { service, camera } }, createElement(Scanner)),
   );
@@ -49,9 +53,12 @@ function setup(status: CameraPermission, record: (code: string) => Promise<ScanO
 
 const recorded: ScanOutcome = {
   status: "recorded",
+  memberId: "m1",
   memberName: "Sam Lee",
   standing: "PAID",
   paidThrough: "2026-12-13",
+  membership: "ACTIVE",
+  leftOn: null,
   isDuplicate: false,
 };
 
@@ -69,7 +76,7 @@ describe("Scanner", () => {
       Scanner: NullScanner,
       openSettings: async () => undefined,
     };
-    const service = { record: vi.fn() };
+    const service = { record: vi.fn(), firstCheckIn: vi.fn() };
     const tree = () =>
       createElement(ScannerProvider, { deps: { service, camera } }, createElement(Scanner));
     const view = render(tree());
@@ -116,35 +123,81 @@ describe("Scanner", () => {
     expect(s.service.record).toHaveBeenCalledWith("ABC123");
     expect(pausedNow).toBe(true);
     await act(async () => finish(recorded));
-    expect(screen.getByText("Checked in")).toBeTruthy();
-    expect(screen.getByText("Sam Lee. Paid through Dec 13, 2026.")).toBeTruthy();
+    expect(screen.getByText("Welcome")).toBeTruthy();
+    expect(screen.getByText("Paid through Dec 13, 2026")).toBeTruthy();
     act(() => emit("ABC123"));
     expect(s.service.record).toHaveBeenCalledTimes(1);
   });
 
-  it("scans again after the result is dismissed", async () => {
+  it("scans again when the result is tapped away", async () => {
     const s = setup("granted", async () => recorded);
     await act(async () => emit("A"));
-    fireEvent.click(screen.getByLabelText("Scan next"));
+    fireEvent.click(screen.getByLabelText("Welcome. Tap to scan the next member."));
     expect(pausedNow).toBe(false);
     await act(async () => emit("B"));
     expect(s.service.record).toHaveBeenCalledTimes(2);
   });
 
-  it("words each result", async () => {
-    const cases: [ScanOutcome, string, string | null][] = [
-      [{ ...recorded, isDuplicate: true }, "Already checked in", "Sam Lee"],
-      [{ ...recorded, memberName: null, paidThrough: null }, "Checked in", "Member"],
-      [{ status: "notRecognized" }, "Barcode not recognized", "Try again, or search by name."],
-      [{ status: "failed", message: "Nope." }, "Could not check in", "Nope."],
-    ];
-    for (const [outcome, title, detail] of cases) {
-      cleanup();
-      setup("granted", async () => outcome);
-      await act(async () => emit("X"));
-      expect(screen.getByText(title)).toBeTruthy();
-      if (detail !== null) expect(screen.getByText(detail)).toBeTruthy();
+  it("goes back to scanning by itself after three seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      const s = setup("granted", async () => recorded);
+      await act(async () => emit("A"));
+      expect(screen.getByText("Welcome")).toBeTruthy();
+      await act(async () => {
+        vi.advanceTimersByTime(2900);
+      });
+      expect(screen.getByText("Welcome")).toBeTruthy();
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(screen.queryByText("Welcome")).toBeNull();
+      expect(screen.getByTestId("camera")).toBeTruthy();
+      await act(async () => emit("B"));
+      expect(s.service.record).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
     }
+  });
+
+  it("shows a repeat scan with the time of the first check in, and does not look it up otherwise", async () => {
+    const lookup = vi.fn(
+      async (): Promise<FirstCheckIn> => ({
+        status: "found",
+        at: "2026-11-26T12:12:00Z",
+        timezone: "America/Toronto",
+      }),
+    );
+    const s = setup("granted", async () => ({ ...recorded, isDuplicate: true }), lookup);
+    await act(async () => emit("A"));
+    expect(lookup).toHaveBeenCalledWith("m1");
+    expect(screen.getByText("Already checked in")).toBeTruthy();
+    expect(screen.getByText("Checked in at 7:12 AM")).toBeTruthy();
+    cleanup();
+    const plain = setup("granted", async () => recorded);
+    await act(async () => emit("A"));
+    expect(plain.service.firstCheckIn).not.toHaveBeenCalled();
+    expect(s.service.firstCheckIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("still shows a repeat scan when the first check in cannot be read", async () => {
+    setup("granted", async () => ({ ...recorded, isDuplicate: true }));
+    await act(async () => emit("A"));
+    expect(screen.getByText("Already checked in")).toBeTruthy();
+    expect(screen.getByText("Checked in earlier")).toBeTruthy();
+  });
+
+  it("shows an unknown barcode and a request error as different cards", async () => {
+    setup("granted", async () => ({ status: "notRecognized" }));
+    await act(async () => emit("X"));
+    expect(screen.getByText("Barcode not recognized")).toBeTruthy();
+    expect(screen.getByText("Try again, or search by name.")).toBeTruthy();
+    cleanup();
+    setup("granted", async () => ({ status: "failed", message: "Nope." }));
+    await act(async () => emit("X"));
+    expect(screen.getByText("Could not check in")).toBeTruthy();
+    expect(screen.getByText("Nope.")).toBeTruthy();
+    expect(screen.queryByText("Barcode not recognized")).toBeNull();
   });
 
   it("says scans cannot be saved when offline, queues nothing and retries on request", async () => {
@@ -178,6 +231,24 @@ describe("Scanner", () => {
     s.view.unmount();
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     await act(async () => finish(recorded));
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("ignores a first check in that arrives after unmount", async () => {
+    let finish!: (first: FirstCheckIn) => void;
+    const s = setup(
+      "granted",
+      async () => ({ ...recorded, isDuplicate: true }),
+      () =>
+        new Promise<FirstCheckIn>((r) => {
+          finish = r;
+        }),
+    );
+    await act(async () => emit("X"));
+    s.view.unmount();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await act(async () => finish({ status: "unknown" }));
     expect(error).not.toHaveBeenCalled();
     error.mockRestore();
   });

@@ -25,11 +25,9 @@ export type ScannerView =
   | { readonly state: "denied" }
   | { readonly state: "offline" }
   /** Waiting for the camera permission answer. */
-  | { readonly state: "waiting" }
-  /** Until the scan result card is built, a scan answer is shown here. */
-  | { readonly state: "result"; readonly title: string; readonly detail: string | null };
+  | { readonly state: "waiting" };
 
-/** A1: the camera scanner and its three states, scanning, camera off, no connection. */
+/** A1: the camera scanner and its states, scanning, camera off, no connection. The result is A1b. */
 export function ScannerScreen(props: {
   readonly view: ScannerView;
   readonly onSearch: () => void;
@@ -68,13 +66,6 @@ export function ScannerScreen(props: {
             online.
           </Text>
           <Button label="Try again" onPress={props.onRetry} />
-        </View>
-      ) : null}
-      {view.state === "result" ? (
-        <View accessibilityRole="alert" style={styles.body}>
-          <Text style={styles.heading}>{view.title}</Text>
-          {view.detail === null ? null : <Text style={styles.text}>{view.detail}</Text>}
-          <Button label="Scan next" onPress={props.onRetry} />
         </View>
       ) : null}
     </View>
