@@ -1,6 +1,8 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MembersProvider } from "../members/context";
+import type { MembersService } from "../members/service";
 import { Customers, SEARCH_DELAY_MS } from "./Customers";
 import { CustomersProvider, useCustomersService } from "./context";
 import { DetailProvider } from "./detail/context";
@@ -46,6 +48,24 @@ const detail: DetailService = {
   voidInvoice: async () => ({ status: "done" }),
 };
 
+const members: MembersService = {
+  loadFees: vi.fn(async () => ({
+    status: "loaded" as const,
+    data: {
+      planId: "p1",
+      planName: "Standard",
+      currency: "USD",
+      timezone: "America/Toronto",
+      admissionFee: 5000,
+      monthlyFee: 8000,
+    },
+  })),
+  loadMember: vi.fn(async () => ({ status: "failed" as const, message: "x" })),
+  searchReferrers: vi.fn(async () => ({ status: "loaded" as const, data: [] })),
+  create: vi.fn(async () => ({ status: "saved" as const, memberId: "m9" })),
+  update: vi.fn(async () => ({ status: "saved" as const, memberId: "m9" })),
+};
+
 function mount(fetch: CustomersService["fetch"]) {
   const service = { fetch: vi.fn(fetch) };
   const view = render(
@@ -55,7 +75,11 @@ function mount(fetch: CustomersService["fetch"]) {
       createElement(
         DetailProvider,
         { service: detail },
-        createElement(Customers, { viewer: "staff" }),
+        createElement(
+          MembersProvider,
+          { service: members },
+          createElement(Customers, { viewer: "staff" }),
+        ),
       ),
     ),
   );
@@ -92,9 +116,23 @@ describe("Customers", () => {
     await settle();
     expect(screen.getByText("No customers yet")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Add member"));
-    expect(screen.getByText("Add member")).toBeTruthy();
-    fireEvent.click(screen.getByLabelText("Back to customers"));
+    await settle();
+    expect(screen.getByLabelText("Full name")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Cancel"));
     expect(screen.getByText("Customers")).toBeTruthy();
+  });
+
+  it("adds a member, returns to the list and refreshes it", async () => {
+    const { service } = mount(async () => ok([]));
+    await settle();
+    fireEvent.click(screen.getByLabelText("Add member"));
+    await settle();
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Sam Lee" } });
+    fireEvent.change(screen.getByLabelText("Google email"), { target: { value: "sam@x.com" } });
+    fireEvent.click(screen.getByLabelText("Add member"));
+    await settle();
+    expect(screen.getByText("Customers")).toBeTruthy();
+    expect(service.fetch).toHaveBeenCalledTimes(2);
   });
 
   it("shows the error state and retries", async () => {
@@ -122,7 +160,8 @@ describe("Customers", () => {
     mount(async () => ok([row("a")]));
     await settle();
     fireEvent.click(screen.getByLabelText("Add"));
-    expect(screen.getByText("Add member")).toBeTruthy();
+    await settle();
+    expect(screen.getByLabelText("Full name")).toBeTruthy();
   });
 
   it("pages with the cursor and stops at the end", async () => {

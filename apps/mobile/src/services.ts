@@ -13,6 +13,7 @@ import { createDetailService, type DetailService } from "./customers/detail/serv
 import type { CustomersService } from "./customers/list";
 import { createCustomersService } from "./customers/list";
 import { createGyms, type Gyms } from "./gyms";
+import { createMembersService, type MembersService } from "./members/service";
 import { createProfileService, type ProfileService } from "./profile/service";
 import type { CameraPort } from "./scanner/camera";
 import type { ScannerDeps } from "./scanner/context";
@@ -44,6 +45,7 @@ export interface Services {
   readonly attendance: AttendanceService;
   readonly profile: ProfileService;
   readonly detail: DetailService;
+  readonly members: MembersService;
 }
 
 export function newRequestId(): string {
@@ -100,5 +102,6 @@ export function composeServices(
     attendance: createAttendanceService({ client }),
     profile: createProfileService({ client }),
     detail: createDetailService({ client }),
+    members: createMembersService({ client }),
   };
 }

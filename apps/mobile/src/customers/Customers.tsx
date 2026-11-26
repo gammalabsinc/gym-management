@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { AddMember } from "../members/AddMember";
+import { EditMember } from "../members/EditMember";
 import { PlaceholderScreen } from "../screens/PlaceholderScreen";
 import { Button } from "../ui/Button";
 import { CustomersScreen } from "./CustomersScreen";
@@ -12,17 +14,11 @@ type Route =
   | { readonly kind: "list" }
   | { readonly kind: "add" }
   | { readonly kind: "detail"; readonly id: string }
-  /** Record payment and edit member are built in later tickets. */
+  /** Record payment is built in a later ticket. */
   | { readonly kind: "payment"; readonly id: string }
   | { readonly kind: "edit"; readonly id: string };
 
-const PLACEHOLDER_TITLES = {
-  add: "Add member",
-  payment: "Record payment",
-  edit: "Edit member",
-} as const;
-
-/** The Customers tab: the list, and the detail of one customer. Add, payment and edit come later. */
+/** The Customers tab: the list, the detail of one customer, and add and edit member. Payment comes later. */
 export function Customers(props: { readonly viewer: "staff" | "owner" }) {
   const service = useCustomersService();
   const [route, setRoute] = useState<Route>({ kind: "list" });
@@ -42,15 +38,35 @@ export function Customers(props: { readonly viewer: "staff" | "owner" }) {
       />
     );
   }
-  if (route.kind !== "list") {
-    const back: Route = route.kind === "add" ? { kind: "list" } : { kind: "detail", id: route.id };
+  if (route.kind === "add") {
+    return (
+      <AddMember
+        onCancel={() => setRoute({ kind: "list" })}
+        onDone={() => {
+          setRoute({ kind: "list" });
+          list.refresh();
+        }}
+      />
+    );
+  }
+  if (route.kind === "edit") {
+    const back: Route = { kind: "detail", id: route.id };
+    return (
+      <EditMember
+        memberId={route.id}
+        onCancel={() => setRoute(back)}
+        onDone={() => setRoute(back)}
+      />
+    );
+  }
+  if (route.kind === "payment") {
     return (
       <>
-        <PlaceholderScreen title={PLACEHOLDER_TITLES[route.kind]} />
+        <PlaceholderScreen title="Record payment" />
         <Button
-          label={route.kind === "add" ? "Back to customers" : "Back to customer"}
+          label="Back to customer"
           kind="secondary"
-          onPress={() => setRoute(back)}
+          onPress={() => setRoute({ kind: "detail", id: route.id })}
         />
       </>
     );
