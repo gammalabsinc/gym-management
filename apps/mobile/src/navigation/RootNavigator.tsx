@@ -1,21 +1,25 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { type Destination, destinationFor, type Session } from "../auth/session";
-import { PlaceholderScreen } from "../screens/PlaceholderScreen";
+import { GymPicker } from "../screens/GymPicker";
 import { SignIn } from "../screens/SignIn";
 import { TabSet } from "./TabSet";
-import { ADMIN_TABS, CUSTOMER_TABS } from "./tabs";
+import { adminTabsFor, CUSTOMER_TABS } from "./tabs";
 
-function Screen(props: { readonly destination: Destination }) {
+function Screen(props: { readonly destination: Destination; readonly session: Session }) {
   switch (props.destination) {
     case "signIn":
       return <SignIn />;
     case "picker":
-      return <PlaceholderScreen title="Pick a gym" />;
+      return <GymPicker />;
     case "customer":
       return <TabSet tabs={CUSTOMER_TABS} />;
     case "admin":
-      return <TabSet tabs={ADMIN_TABS} />;
+      return (
+        <TabSet
+          tabs={adminTabsFor(props.session.status === "signedIn" ? props.session.role : "staff")}
+        />
+      );
   }
 }
 
@@ -24,7 +28,7 @@ export function RootNavigator(props: { readonly session: Session }) {
   return (
     <SafeAreaProvider>
       <NavigationContainer>
-        <Screen destination={destinationFor(props.session)} />
+        <Screen destination={destinationFor(props.session)} session={props.session} />
       </NavigationContainer>
     </SafeAreaProvider>
   );

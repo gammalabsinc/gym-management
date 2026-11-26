@@ -73,6 +73,24 @@ describe("createClient", () => {
     expect(onUnauthenticated).not.toHaveBeenCalled();
   });
 
+  it("tells the app when the server says forbidden, and copes when nobody listens", async () => {
+    const forbidden = () =>
+      json({ data: null, errors: [{ message: "x", extensions: { code: "FORBIDDEN" } }] });
+    const quiet = setup(forbidden);
+    expect((await quiet.client.execute(op)).status).toBe("error");
+    const onForbidden = vi.fn();
+    const client = createClient({
+      apiUrl: "https://api.test/graphql",
+      getToken: () => "tok",
+      onUnauthenticated: vi.fn(),
+      onForbidden,
+      newRequestId: () => "req-1",
+      fetch: async () => forbidden(),
+    });
+    await client.execute(op);
+    expect(onForbidden).toHaveBeenCalledTimes(1);
+  });
+
   it("signs the user out on an unauthenticated error", async () => {
     const { client, onUnauthenticated } = setup(() =>
       json({ errors: [{ extensions: { code: "UNAUTHENTICATED", requestId: "r" } }] }),
