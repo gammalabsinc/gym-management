@@ -5,6 +5,9 @@ import { SIGNED_OUT } from "../auth/session";
 
 // The navigation libraries need the native runtime. Replace them with plain wrappers,
 // so these tests cover our own gate and tab wiring.
+vi.mock("../card/MemberCard", () => ({
+  MemberCard: () => createElement("div", null, "Member card screen"),
+}));
 vi.mock("../screens/GymPicker", () => ({
   GymPicker: () => createElement("div", null, "Pick a gym"),
 }));
@@ -50,6 +53,7 @@ describe("RootNavigator", () => {
     render(createElement(RootNavigator, { session: { status: "signedIn", role: "member" } }));
     expect(screen.getByTestId("tab-Card")).toBeTruthy();
     expect(screen.getByTestId("tab-Visits")).toBeTruthy();
+    expect(screen.getByText("Member card screen")).toBeTruthy();
     expect(screen.queryByTestId("tab-Scan")).toBeNull();
   });
 

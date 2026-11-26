@@ -3,6 +3,10 @@ import { type Auth, createAuth } from "./auth/auth";
 import { createGoogleSignIn, type GoogleSigninLike } from "./auth/google";
 import { createSessionStore, type SessionStore } from "./auth/session-store";
 import { createSecureTokenStorage, type SecureStoreLike } from "./auth/token-storage";
+import type { BrightnessLike } from "./card/brightness";
+import { createCardCache, type KeyValueLike } from "./card/cache";
+import { createCardService } from "./card/card";
+import type { CardDeps } from "./card/context";
 import type { RuntimeConfig } from "./config/build-config";
 import { createGyms, type Gyms } from "./gyms";
 
@@ -12,6 +16,8 @@ export interface Platform {
   /** The `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY` constant of expo-secure-store. */
   readonly accessible: number;
   readonly google: GoogleSigninLike;
+  readonly storage: KeyValueLike;
+  readonly brightness: BrightnessLike;
 }
 
 export interface Services {
@@ -19,6 +25,7 @@ export interface Services {
   readonly client: Client;
   readonly auth: Auth;
   readonly gyms: Gyms;
+  readonly card: CardDeps;
 }
 
 export function newRequestId(): string {
@@ -56,5 +63,11 @@ export function composeServices(
     store,
   });
   gyms = createGyms({ client, store });
-  return { store, client, auth, gyms };
+  const cache = createCardCache(platform.storage);
+  // The cached card belongs to one signed in gym. Signing out, losing access or switching gym drops it.
+  store.subscribe(() => {
+    if (store.getSession().status !== "signedIn") void cache.clear();
+  });
+  const service = createCardService({ client, cache, store, now: () => new Date() });
+  return { store, client, auth, gyms, card: { service, brightness: platform.brightness } };
 }

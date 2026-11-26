@@ -12,6 +12,15 @@ const platform = {
   },
   accessible: 1,
   google: { configure: vi.fn(), signIn: vi.fn(), signOut: vi.fn(async () => undefined) },
+  storage: {
+    getItem: vi.fn(async () => null),
+    setItem: vi.fn(async () => undefined),
+    removeItem: vi.fn(async () => undefined),
+  },
+  brightness: {
+    getBrightnessAsync: vi.fn(async () => 0.5),
+    setBrightnessAsync: vi.fn(async () => undefined),
+  },
 };
 
 vi.mock("./navigation/RootNavigator", () => ({
