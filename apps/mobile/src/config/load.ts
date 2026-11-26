@@ -13,5 +13,10 @@ function text(value: unknown): string | undefined {
 export function loadRuntimeConfig(constants: ConstantsLike): RuntimeConfig {
   const extra = constants.expoConfig?.extra;
   if (extra === undefined) throw new ConfigError(["extra: missing from the app config"]);
-  return parseBuildEnv({ APP_ENV: text(extra.appEnv), API_URL: text(extra.apiUrl) });
+  return parseBuildEnv({
+    BUILD_PROFILE: text(extra.profile),
+    API_URL: text(extra.apiUrl),
+    GOOGLE_IOS_CLIENT_ID: text(extra.googleIosClientId),
+    GOOGLE_ANDROID_CLIENT_ID: text(extra.googleAndroidClientId),
+  });
 }

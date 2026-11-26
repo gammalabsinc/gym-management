@@ -11,7 +11,9 @@ vi.mock("./navigation/RootNavigator", () => ({
 
 afterEach(cleanup);
 
-const valid = { expoConfig: { extra: { appEnv: "development", apiUrl: "http://localhost:3000" } } };
+const valid = {
+  expoConfig: { extra: { profile: "development", apiUrl: "http://localhost:3000" } },
+};
 
 describe("App", () => {
   it("starts signed out when the config is valid", () => {
@@ -20,8 +22,8 @@ describe("App", () => {
   });
 
   it("shows the configuration problem instead of crashing", () => {
-    render(createElement(App, { constants: { expoConfig: { extra: { appEnv: "qa" } } } }));
-    expect(screen.getByText(/APP_ENV: must be one of/)).toBeTruthy();
+    render(createElement(App, { constants: { expoConfig: { extra: { profile: "qa" } } } }));
+    expect(screen.getByText(/BUILD_PROFILE: must be one of/)).toBeTruthy();
   });
 
   it("rethrows errors that are not configuration problems", () => {

@@ -7,6 +7,7 @@ import { createSessionStore, type SessionStore } from "./auth/session-store";
 import { ConfigError, type RuntimeConfig } from "./config/build-config";
 import { ConfigProvider } from "./config/context";
 import { type ConstantsLike, loadRuntimeConfig } from "./config/load";
+import { ProfileMarker } from "./config/ProfileMarker";
 import { RootNavigator } from "./navigation/RootNavigator";
 
 export interface AppProps {
@@ -47,6 +48,7 @@ function Authenticated(props: { readonly config: RuntimeConfig }) {
   return (
     <ClientProvider client={client}>
       <StatusBar style="auto" />
+      <ProfileMarker profile={props.config.profile} />
       <RootNavigator session={session} />
     </ClientProvider>
   );

@@ -1,10 +1,22 @@
-export const APP_ENVS = ["development", "staging", "production"] as const;
-export type AppEnv = (typeof APP_ENVS)[number];
+/**
+ * `development` is for local work only. `internal` and `production` are the two
+ * build service profiles, and both talk to the production API.
+ */
+export const BUILD_PROFILES = ["development", "internal", "production"] as const;
+export type BuildProfile = (typeof BUILD_PROFILES)[number];
+
+/** Google OAuth client ids are public identifiers, not secrets, but they still come from the build environment. */
+export interface GoogleClientIds {
+  readonly ios: string;
+  readonly android: string;
+}
 
 /** The only configuration the app bundle carries. It holds no secrets. */
 export interface RuntimeConfig {
-  readonly appEnv: AppEnv;
+  readonly profile: BuildProfile;
   readonly apiUrl: string;
+  /** Null only in the development profile, where Google sign in is not wired up. */
+  readonly googleClientIds: GoogleClientIds | null;
 }
 
 export class ConfigError extends Error {
@@ -19,38 +31,82 @@ export class ConfigError extends Error {
 
 export type BuildEnv = Readonly<Record<string, string | undefined>>;
 
-function parseAppEnv(value: string | undefined): AppEnv | null {
-  if (value === undefined || value === "") return "development";
-  return APP_ENVS.find((candidate) => candidate === value) ?? null;
+const GOOGLE_CLIENT_ID_SUFFIX = ".apps.googleusercontent.com";
+
+type Parsed<T> = { readonly value: T } | { readonly problems: readonly string[] };
+
+function isMissing(value: string | undefined): value is undefined {
+  return value === undefined || value === "";
 }
 
-function parseApiUrl(value: string | undefined, appEnv: AppEnv): string | string[] {
-  if (value === undefined || value === "") return ["API_URL: is required"];
+function parseProfile(value: string | undefined): Parsed<BuildProfile> {
+  if (isMissing(value)) return { value: "development" };
+  const profile = BUILD_PROFILES.find((candidate) => candidate === value);
+  if (profile === undefined) {
+    return { problems: [`BUILD_PROFILE: must be one of ${BUILD_PROFILES.join(", ")}`] };
+  }
+  return { value: profile };
+}
+
+function parseApiUrl(value: string | undefined, profile: BuildProfile): Parsed<string> {
+  if (isMissing(value)) return { problems: ["API_URL: is required"] };
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    return ["API_URL: must be an absolute URL"];
+    return { problems: ["API_URL: must be an absolute URL"] };
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    return ["API_URL: must start with http:// or https://"];
+    return { problems: ["API_URL: must start with http:// or https://"] };
   }
-  if (appEnv !== "development" && url.protocol !== "https:") {
-    return [`API_URL: must use https for ${appEnv}`];
+  if (profile !== "development" && url.protocol !== "https:") {
+    return { problems: [`API_URL: must use https for ${profile}`] };
   }
-  return value.replace(/\/+$/, "");
+  return { value: value.replace(/\/+$/, "") };
+}
+
+function parseGoogleClientId(name: string, value: string | undefined): Parsed<string> {
+  if (isMissing(value)) return { problems: [`${name}: is required`] };
+  if (!value.endsWith(GOOGLE_CLIENT_ID_SUFFIX)) {
+    return {
+      problems: [`${name}: must be a Google client id ending in ${GOOGLE_CLIENT_ID_SUFFIX}`],
+    };
+  }
+  return { value };
+}
+
+function parseGoogleClientIds(env: BuildEnv): Parsed<GoogleClientIds> {
+  const ios = parseGoogleClientId("GOOGLE_IOS_CLIENT_ID", env.GOOGLE_IOS_CLIENT_ID);
+  const android = parseGoogleClientId("GOOGLE_ANDROID_CLIENT_ID", env.GOOGLE_ANDROID_CLIENT_ID);
+  if ("value" in ios && "value" in android) {
+    return { value: { ios: ios.value, android: android.value } };
+  }
+  return {
+    problems: [
+      ...("problems" in ios ? ios.problems : []),
+      ...("problems" in android ? android.problems : []),
+    ],
+  };
 }
 
 /**
- * Parses the build environment once. Problems name the variable and the rule,
- * and never repeat the value, so a mistyped URL cannot leak into a log.
+ * Parses the build environment once and reports every problem together. Problems name
+ * the variable and the rule, and never repeat the value, so a mistyped value cannot
+ * leak into a log.
  */
 export function parseBuildEnv(env: BuildEnv): RuntimeConfig {
-  const appEnv = parseAppEnv(env.APP_ENV);
-  if (appEnv === null) {
-    throw new ConfigError([`APP_ENV: must be one of ${APP_ENVS.join(", ")}`]);
-  }
-  const apiUrl = parseApiUrl(env.API_URL, appEnv);
-  if (typeof apiUrl !== "string") throw new ConfigError(apiUrl);
-  return { appEnv, apiUrl };
+  const profile = parseProfile(env.BUILD_PROFILE);
+  if ("problems" in profile) throw new ConfigError(profile.problems);
+
+  const apiUrl = parseApiUrl(env.API_URL, profile.value);
+  const googleClientIds =
+    profile.value === "development" ? ({ value: null } as const) : parseGoogleClientIds(env);
+
+  const problems = [
+    ...("problems" in apiUrl ? apiUrl.problems : []),
+    ...("problems" in googleClientIds ? googleClientIds.problems : []),
+  ];
+  if ("problems" in apiUrl || "problems" in googleClientIds) throw new ConfigError(problems);
+
+  return { profile: profile.value, apiUrl: apiUrl.value, googleClientIds: googleClientIds.value };
 }

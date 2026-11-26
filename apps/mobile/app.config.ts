@@ -1,16 +1,26 @@
 import type { ExpoConfig } from "expo/config";
+import { appIdentity } from "./src/config/app-identity.ts";
 import { parseBuildEnv } from "./src/config/build-config.ts";
 
-// The API URL and environment come from the build environment, never from source.
+// Every value comes from the build environment, never from source. A missing or
+// malformed value stops the build here with an error that names the variable.
 const runtime = parseBuildEnv(process.env);
+const identity = appIdentity(runtime.profile);
 
 const config: ExpoConfig = {
-  name: "Gym",
+  name: identity.name,
   slug: "gym-management",
   version: "0.0.0",
   orientation: "portrait",
   userInterfaceStyle: "automatic",
-  extra: { appEnv: runtime.appEnv, apiUrl: runtime.apiUrl },
+  ios: { bundleIdentifier: identity.appId },
+  android: { package: identity.appId },
+  extra: {
+    profile: runtime.profile,
+    apiUrl: runtime.apiUrl,
+    googleIosClientId: runtime.googleClientIds?.ios,
+    googleAndroidClientId: runtime.googleClientIds?.android,
+  },
 };
 
 export default config;

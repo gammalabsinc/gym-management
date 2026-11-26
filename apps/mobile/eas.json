@@ -1,0 +1,17 @@
+{
+  "cli": { "appVersionSource": "remote" },
+  "build": {
+    "internal": {
+      "distribution": "internal",
+      "environment": "preview",
+      "env": { "BUILD_PROFILE": "internal" }
+    },
+    "production": {
+      "distribution": "store",
+      "environment": "production",
+      "autoIncrement": true,
+      "env": { "BUILD_PROFILE": "production" }
+    }
+  },
+  "submit": { "production": {} }
+}
