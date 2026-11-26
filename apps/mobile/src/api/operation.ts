@@ -50,6 +50,7 @@ interface RootArgs {
     inviteUser: Schema.MutationInviteUserArgs;
     recordPayment: Schema.MutationRecordPaymentArgs;
     recordScan: Schema.MutationRecordScanArgs;
+    removeAccess: Schema.MutationRemoveAccessArgs;
     selectGym: Schema.MutationSelectGymArgs;
     signIn: Schema.MutationSignInArgs;
     setRole: Schema.MutationSetRoleArgs;

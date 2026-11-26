@@ -37,6 +37,7 @@ export const PENDING_MUTATIONS: readonly MutationName[] = [
   "updateSettings",
   "inviteUser",
   "setRole",
+  "removeAccess",
 ];
 
 export interface MutationGuardInput {
