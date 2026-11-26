@@ -2,35 +2,18 @@ import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PlaceholderScreen } from "../screens/PlaceholderScreen";
 import { Button } from "../ui/Button";
-import { formatDate } from "../ui/dates";
 import { useScannerDeps } from "./context";
 import { ScannerScreen } from "./ScannerScreen";
-import type { ScanOutcome } from "./scan";
+import { ScanResultCard } from "./ScanResultCard";
+import type { FirstCheckIn } from "./scan";
+import { describeScan, type ShownScan } from "./scan-card";
 
 type Phase =
   | { readonly kind: "scanning" }
   | { readonly kind: "sending" }
   | { readonly kind: "offline" }
-  | { readonly kind: "result"; readonly outcome: ScanOutcome }
+  | { readonly kind: "result"; readonly outcome: ShownScan; readonly first: FirstCheckIn | null }
   | { readonly kind: "search" };
-
-function resultText(outcome: ScanOutcome): { title: string; detail: string | null } {
-  switch (outcome.status) {
-    case "recorded": {
-      const name = outcome.memberName ?? "Member";
-      if (outcome.isDuplicate) return { title: "Already checked in", detail: name };
-      const through =
-        outcome.paidThrough === null ? null : `Paid through ${formatDate(outcome.paidThrough)}`;
-      return { title: "Checked in", detail: through === null ? name : `${name}. ${through}.` };
-    }
-    case "notRecognized":
-      return { title: "Barcode not recognized", detail: "Try again, or search by name." };
-    case "failed":
-      return { title: "Could not check in", detail: outcome.message };
-    case "offline":
-      return { title: "No connection", detail: null };
-  }
-}
 
 /**
  * One physical scan sends one request. The scanner is locked from the first read until the person
@@ -69,7 +52,17 @@ export function Scanner() {
       setPhase({ kind: "sending" });
       const outcome = await service.record(value);
       if (!mounted.current) return;
-      setPhase(outcome.status === "offline" ? { kind: "offline" } : { kind: "result", outcome });
+      if (outcome.status === "offline") {
+        setPhase({ kind: "offline" });
+        return;
+      }
+      // A repeat scan shows when the member first checked in. If that cannot be read the card still shows.
+      const first =
+        outcome.status === "recorded" && outcome.isDuplicate
+          ? await service.firstCheckIn(outcome.memberId)
+          : null;
+      if (!mounted.current) return;
+      setPhase({ kind: "result", outcome, first });
     },
     [service],
   );
@@ -97,7 +90,7 @@ export function Scanner() {
 
   if (phase.kind === "offline") return <ScannerScreen view={{ state: "offline" }} {...base} />;
   if (phase.kind === "result") {
-    return <ScannerScreen view={{ state: "result", ...resultText(phase.outcome) }} {...base} />;
+    return <ScanResultCard view={describeScan(phase.outcome, phase.first)} onDone={resume} />;
   }
   if (status === "denied") return <ScannerScreen view={{ state: "denied" }} {...base} />;
   if (status !== "granted") return <ScannerScreen view={{ state: "waiting" }} {...base} />;

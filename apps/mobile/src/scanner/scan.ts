@@ -1,14 +1,20 @@
 import type { Client } from "../api/client";
-import { mutation } from "../api/operation";
+import { mutation, query } from "../api/operation";
 
 export type Standing = "PAID" | "DUE_SOON" | "OVERDUE" | "INACTIVE";
+
+export type Membership = "ACTIVE" | "PAUSED" | "CANCELLED";
 
 export type ScanOutcome =
   | {
       readonly status: "recorded";
+      readonly memberId: string;
       readonly memberName: string | null;
       readonly standing: Standing;
       readonly paidThrough: string | null;
+      readonly membership: Membership;
+      /** The gym's local date the member left, null while the membership has not ended. */
+      readonly leftOn: string | null;
       /** The member was already scanned inside the repeat window. */
       readonly isDuplicate: boolean;
     }
@@ -17,8 +23,15 @@ export type ScanOutcome =
   | { readonly status: "offline" }
   | { readonly status: "failed"; readonly message: string };
 
+/** When a repeated scan was first checked in, in the gym's time zone. */
+export type FirstCheckIn =
+  | { readonly status: "found"; readonly at: string; readonly timezone: string }
+  | { readonly status: "unknown" };
+
 export interface ScanService {
   record(barcode: string): Promise<ScanOutcome>;
+  /** The original check in behind a repeated scan. Any failure answers `unknown`, it never blocks. */
+  firstCheckIn(memberId: string): Promise<FirstCheckIn>;
 }
 
 export const SCAN_FAILED_MESSAGE = "That scan could not be saved. Try again.";
@@ -29,9 +42,28 @@ const recordScan = (barcode: string) =>
       args: { barcode },
       select: {
         visit: { isDuplicate: true },
-        member: { name: true, standing: true, paidThrough: true },
+        member: {
+          id: true,
+          name: true,
+          standing: true,
+          paidThrough: true,
+          status: true,
+          leftOn: true,
+        },
         errors: { code: true },
       },
+    },
+  });
+
+/** The newest visits, of which the newest one that is not itself a repeat is the original check in. */
+export const RECENT_VISITS = 5;
+
+const recentVisits = (memberId: string) =>
+  query("OriginalCheckIn", {
+    tenant: { select: { timezone: true } },
+    visits: {
+      args: { memberId, page: { limit: RECENT_VISITS } },
+      select: { items: { scannedAt: true, isDuplicate: true } },
     },
   });
 
@@ -57,13 +89,24 @@ export function createScanService(deps: { readonly client: Pick<Client, "execute
           }
           return {
             status: "recorded",
+            memberId: member.id,
             memberName: member.name ?? null,
             standing: member.standing,
             paidThrough: member.paidThrough ?? null,
+            membership: member.status,
+            leftOn: member.leftOn ?? null,
             isDuplicate: visit.isDuplicate,
           };
         }
       }
+    },
+
+    async firstCheckIn(memberId) {
+      const outcome = await deps.client.execute(recentVisits(memberId));
+      if (outcome.status !== "data") return { status: "unknown" };
+      const original = outcome.data.visits.items.find((visit) => !visit.isDuplicate);
+      if (original === undefined) return { status: "unknown" };
+      return { status: "found", at: original.scannedAt, timezone: outcome.data.tenant.timezone };
     },
   };
 }
