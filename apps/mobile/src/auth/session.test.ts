@@ -6,6 +6,10 @@ describe("destinationFor", () => {
     expect(destinationFor(SIGNED_OUT)).toBe("signIn");
   });
 
+  it("sends a signed in person without a gym to the gym picker", () => {
+    expect(destinationFor({ status: "identity" })).toBe("picker");
+  });
+
   it("sends members to the customer tabs", () => {
     expect(destinationFor({ status: "signedIn", role: "member" })).toBe("customer");
   });
