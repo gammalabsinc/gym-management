@@ -14,6 +14,7 @@ import { createGyms, type Gyms } from "./gyms";
 import type { CameraPort } from "./scanner/camera";
 import type { ScannerDeps } from "./scanner/context";
 import { createScanService } from "./scanner/scan";
+import { createSettingsService, type SettingsService } from "./settings/service";
 
 /** The native pieces, passed in from the entry point so tests need no native module. */
 export interface Platform {
@@ -34,6 +35,7 @@ export interface Services {
   readonly card: CardDeps;
   readonly scanner: ScannerDeps;
   readonly customers: CustomersService;
+  readonly settings: SettingsService;
 }
 
 export function newRequestId(): string {
@@ -85,5 +87,6 @@ export function composeServices(
     card: { service, brightness: platform.brightness },
     scanner: { service: createScanService({ client }), camera: platform.camera },
     customers: createCustomersService({ client }),
+    settings: createSettingsService({ client }),
   };
 }

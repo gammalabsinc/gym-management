@@ -12,6 +12,7 @@ import { CustomersProvider } from "./customers/context";
 import { RootNavigator } from "./navigation/RootNavigator";
 import { ScannerProvider } from "./scanner/context";
 import { composeServices, type Platform } from "./services";
+import { SettingsProvider } from "./settings/context";
 
 export interface AppProps {
   readonly constants: ConstantsLike;
@@ -57,7 +58,9 @@ function Authenticated(props: { readonly config: RuntimeConfig; readonly platfor
           <CardProvider deps={services.card}>
             <ScannerProvider deps={services.scanner}>
               <CustomersProvider service={services.customers}>
-                {restored ? <RootNavigator session={session} /> : null}
+                <SettingsProvider service={services.settings}>
+                  {restored ? <RootNavigator session={session} /> : null}
+                </SettingsProvider>
               </CustomersProvider>
             </ScannerProvider>
           </CardProvider>
