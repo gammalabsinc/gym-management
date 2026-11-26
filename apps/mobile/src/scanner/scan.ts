@@ -28,18 +28,36 @@ export type FirstCheckIn =
   | { readonly status: "found"; readonly at: string; readonly timezone: string }
   | { readonly status: "unknown" };
 
+/** A scan from the camera, or a check in the person at the desk chose from a search. */
+export type ScanSource = "STAFF_APP" | "MANUAL";
+
+export interface SearchRow {
+  readonly memberId: string;
+  readonly barcode: string;
+  readonly name: string | null;
+  readonly memberNo: string;
+  readonly status: Membership;
+  readonly standing: Standing;
+}
+
+export type SearchResult =
+  | { readonly status: "results"; readonly rows: readonly SearchRow[] }
+  | { readonly status: "failed"; readonly message: string };
+
 export interface ScanService {
-  record(barcode: string): Promise<ScanOutcome>;
+  record(barcode: string, source?: ScanSource): Promise<ScanOutcome>;
+  /** Members matching a name, email or member number, in the server's order. Blank text asks nothing. */
+  search(text: string): Promise<SearchResult>;
   /** The original check in behind a repeated scan. Any failure answers `unknown`, it never blocks. */
   firstCheckIn(memberId: string): Promise<FirstCheckIn>;
 }
 
 export const SCAN_FAILED_MESSAGE = "That scan could not be saved. Try again.";
 
-const recordScan = (barcode: string) =>
+const recordScan = (barcode: string, source: ScanSource) =>
   mutation("RecordScan", {
     recordScan: {
-      args: { barcode },
+      args: source === "MANUAL" ? { barcode, source } : { barcode },
       select: {
         visit: { isDuplicate: true },
         member: {
@@ -67,10 +85,32 @@ const recentVisits = (memberId: string) =>
     },
   });
 
+/** Enough rows to find someone at the desk. Typing more narrows the list, so there is no paging. */
+export const SEARCH_LIMIT = 20;
+
+export const SEARCH_FAILED_MESSAGE = "Could not search. Try again.";
+
+const memberSearch = (search: string) =>
+  query("CheckInSearch", {
+    members: {
+      args: { search, page: { limit: SEARCH_LIMIT } },
+      select: {
+        items: {
+          id: true,
+          barcode: true,
+          name: true,
+          memberNo: true,
+          status: true,
+          standing: true,
+        },
+      },
+    },
+  });
+
 export function createScanService(deps: { readonly client: Pick<Client, "execute"> }): ScanService {
   return {
-    async record(barcode) {
-      const outcome = await deps.client.execute(recordScan(barcode));
+    async record(barcode, source = "STAFF_APP") {
+      const outcome = await deps.client.execute(recordScan(barcode, source));
       switch (outcome.status) {
         case "network":
           return { status: "offline" };
@@ -98,6 +138,32 @@ export function createScanService(deps: { readonly client: Pick<Client, "execute
             isDuplicate: visit.isDuplicate,
           };
         }
+      }
+    },
+
+    async search(text) {
+      const trimmed = text.trim();
+      if (trimmed === "") return { status: "results", rows: [] };
+      const outcome = await deps.client.execute(memberSearch(trimmed));
+      switch (outcome.status) {
+        case "network":
+          return { status: "failed", message: outcome.message };
+        case "error":
+          return { status: "failed", message: outcome.error.message };
+        case "empty":
+          return { status: "results", rows: [] };
+        case "data":
+          return {
+            status: "results",
+            rows: outcome.data.members.items.map((member) => ({
+              memberId: member.id,
+              barcode: member.barcode,
+              name: member.name ?? null,
+              memberNo: member.memberNo,
+              status: member.status,
+              standing: member.standing,
+            })),
+          };
       }
     },
 

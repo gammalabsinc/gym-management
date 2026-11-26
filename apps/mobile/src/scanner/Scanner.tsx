@@ -1,11 +1,10 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PlaceholderScreen } from "../screens/PlaceholderScreen";
-import { Button } from "../ui/Button";
+import { CheckInSearch } from "./CheckInSearch";
 import { useScannerDeps } from "./context";
 import { ScannerScreen } from "./ScannerScreen";
 import { ScanResultCard } from "./ScanResultCard";
-import type { FirstCheckIn } from "./scan";
+import type { FirstCheckIn, ScanOutcome, SearchRow } from "./scan";
 import { describeScan, type ShownScan } from "./scan-card";
 
 type Phase =
@@ -45,13 +44,9 @@ export function Scanner() {
     }
   }, [status, request]);
 
-  const onScan = useCallback(
-    async (value: string): Promise<void> => {
-      if (locked.current) return;
-      locked.current = true;
-      setPhase({ kind: "sending" });
-      const outcome = await service.record(value);
-      if (!mounted.current) return;
+  /** Shows what a recorded scan or check in came to. Both take the same road to the result card. */
+  const finish = useCallback(
+    async (outcome: ScanOutcome): Promise<void> => {
       if (outcome.status === "offline") {
         setPhase({ kind: "offline" });
         return;
@@ -67,18 +62,37 @@ export function Scanner() {
     [service],
   );
 
+  const onScan = useCallback(
+    async (value: string): Promise<void> => {
+      if (locked.current) return;
+      locked.current = true;
+      setPhase({ kind: "sending" });
+      const outcome = await service.record(value);
+      if (!mounted.current) return;
+      await finish(outcome);
+    },
+    [service, finish],
+  );
+
+  /** A row chosen in the search. The list stays on screen with its buttons off until the answer comes. */
+  const checkInRow = useCallback(
+    async (row: SearchRow): Promise<void> => {
+      if (locked.current) return;
+      locked.current = true;
+      const outcome = await service.record(row.barcode, "MANUAL");
+      if (!mounted.current) return;
+      await finish(outcome);
+    },
+    [service, finish],
+  );
+
   const resume = useCallback(() => {
     locked.current = false;
     setPhase({ kind: "scanning" });
   }, []);
 
   if (phase.kind === "search") {
-    return (
-      <>
-        <PlaceholderScreen title="Check in by search" />
-        <Button label="Back to scanner" kind="secondary" onPress={resume} />
-      </>
-    );
+    return <CheckInSearch service={service} onCheckIn={checkInRow} onBack={resume} />;
   }
 
   const openSearch = () => setPhase({ kind: "search" });

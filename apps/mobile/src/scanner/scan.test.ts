@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createScanService, RECENT_VISITS, SCAN_FAILED_MESSAGE } from "./scan";
+import { createScanService, RECENT_VISITS, SCAN_FAILED_MESSAGE, SEARCH_LIMIT } from "./scan";
 
 function service(outcome: unknown) {
   const client = { execute: vi.fn(async (_operation: { variables: unknown }) => outcome) };
@@ -137,5 +137,76 @@ describe("scan service", () => {
     ]) {
       expect(await service(outcome).svc.firstCheckIn("m1")).toEqual({ status: "unknown" });
     }
+  });
+});
+
+describe("scan service search", () => {
+  const found = {
+    status: "data",
+    data: {
+      members: {
+        items: [
+          {
+            id: "m1",
+            barcode: "ABC123",
+            name: null,
+            memberNo: "0042",
+            status: "ACTIVE",
+            standing: "OVERDUE",
+          },
+        ],
+      },
+    },
+  };
+
+  it("sends the trimmed text with a page limit and maps the rows", async () => {
+    const s = service(found);
+    expect(await s.svc.search("  sam ")).toEqual({
+      status: "results",
+      rows: [
+        {
+          memberId: "m1",
+          barcode: "ABC123",
+          name: null,
+          memberNo: "0042",
+          status: "ACTIVE",
+          standing: "OVERDUE",
+        },
+      ],
+    });
+    const sent = JSON.stringify(s.client.execute.mock.calls[0]);
+    expect(sent).toContain('"sam"');
+    expect(sent).toContain(String(SEARCH_LIMIT));
+  });
+
+  it("asks nothing for blank text", async () => {
+    const s = service(found);
+    expect(await s.svc.search("   ")).toEqual({ status: "results", rows: [] });
+    expect(s.client.execute).not.toHaveBeenCalled();
+  });
+
+  it("maps empty, network and error outcomes", async () => {
+    expect(await service({ status: "empty" }).svc.search("x")).toEqual({
+      status: "results",
+      rows: [],
+    });
+    expect(await service({ status: "network", message: "Offline" }).svc.search("x")).toEqual({
+      status: "failed",
+      message: "Offline",
+    });
+    expect(await service({ status: "error", error: { message: "Nope" } }).svc.search("x")).toEqual({
+      status: "failed",
+      message: "Nope",
+    });
+  });
+
+  it("marks a check in from the search as manual, and a scan as the staff app", async () => {
+    const ok = data({ visit: null, member: null, errors: [{ code: "NOT_FOUND" }] });
+    const manual = service(ok);
+    await manual.svc.record("ABC123", "MANUAL");
+    expect(JSON.stringify(manual.client.execute.mock.calls[0])).toContain("MANUAL");
+    const scan = service(ok);
+    await scan.svc.record("ABC123");
+    expect(JSON.stringify(scan.client.execute.mock.calls[0])).not.toContain("MANUAL");
   });
 });
