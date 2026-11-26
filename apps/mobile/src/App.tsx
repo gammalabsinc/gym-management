@@ -11,6 +11,7 @@ import { type ConstantsLike, loadRuntimeConfig } from "./config/load";
 import { ProfileMarker } from "./config/ProfileMarker";
 import { CustomersProvider } from "./customers/context";
 import { DetailProvider } from "./customers/detail/context";
+import { MembersProvider } from "./members/context";
 import { RootNavigator } from "./navigation/RootNavigator";
 import { ProfileProvider } from "./profile/context";
 import { ScannerProvider } from "./scanner/context";
@@ -67,7 +68,9 @@ function Authenticated(props: { readonly config: RuntimeConfig; readonly platfor
                     <AttendanceProvider service={services.attendance}>
                       <ProfileProvider service={services.profile}>
                         <DetailProvider service={services.detail}>
-                          {restored ? <RootNavigator session={session} /> : null}
+                          <MembersProvider service={services.members}>
+                            {restored ? <RootNavigator session={session} /> : null}
+                          </MembersProvider>
                         </DetailProvider>
                       </ProfileProvider>
                     </AttendanceProvider>
