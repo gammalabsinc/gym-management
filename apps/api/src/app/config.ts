@@ -27,6 +27,13 @@ export interface Config {
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly databaseUrl: string;
+  /**
+   * The Google OAuth client ids of the mobile app, the audiences a sign in token may carry.
+   * Empty means nobody can sign in, because every token is refused.
+   */
+  readonly googleClientIds: readonly string[];
+  /** How long a session lasts after sign in, in days. */
+  readonly sessionDays: number;
   /** Only the migrate mode needs it. The app role in databaseUrl cannot change the schema. */
   readonly migratorDatabaseUrl?: string;
   /**

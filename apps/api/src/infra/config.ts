@@ -68,6 +68,8 @@ const envSchema = z
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
     DATABASE_URL: z.url(),
+    GOOGLE_CLIENT_IDS: z.string().default(""),
+    SESSION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
     MIGRATOR_DATABASE_URL: z.url().optional(),
     MIGRATOR_ROLE_PASSWORD: z.string().min(MIN_PASSWORD_LENGTH).optional(),
     APP_ROLE_PASSWORD: z.string().min(MIN_PASSWORD_LENGTH).optional(),
@@ -90,6 +92,10 @@ const envSchema = z
       port: env.PORT,
       logLevel: env.LOG_LEVEL,
       databaseUrl: env.DATABASE_URL,
+      googleClientIds: env.GOOGLE_CLIENT_IDS.split(",")
+        .map((id) => id.trim())
+        .filter((id) => id !== ""),
+      sessionDays: env.SESSION_DAYS,
       ...(env.MIGRATOR_DATABASE_URL === undefined
         ? {}
         : { migratorDatabaseUrl: env.MIGRATOR_DATABASE_URL }),

@@ -2,10 +2,15 @@ import type { SqlExecutor } from "./sql-executor";
 import { requireTenantTx, type TenantTx } from "./tenant-tx";
 
 /** TypeORM answers an UPDATE or DELETE with `[rows, affectedCount]`. Every other statement answers rows. */
-function isAffectedRowsPair(raw: unknown): raw is [unknown[], number] {
+export function isAffectedRowsPair(raw: unknown): raw is [unknown[], number] {
   return (
     Array.isArray(raw) && raw.length === 2 && Array.isArray(raw[0]) && typeof raw[1] === "number"
   );
+}
+
+/** The rows of a TypeORM answer, whatever the statement kind was. */
+export function rowsOf(raw: unknown): unknown {
+  return isAffectedRowsPair(raw) ? raw[0] : raw;
 }
 
 /**
@@ -16,8 +21,7 @@ export function makeTxExecutor(tx: TenantTx): SqlExecutor {
   const scope = requireTenantTx(tx);
   return {
     async query(sql, params) {
-      const raw: unknown = await scope.manager.query(sql, params);
-      return isAffectedRowsPair(raw) ? raw[0] : raw;
+      return rowsOf(await scope.manager.query(sql, params));
     },
   };
 }

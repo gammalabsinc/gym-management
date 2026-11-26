@@ -6,7 +6,7 @@ import {
   Kind,
   type SelectionSetNode,
 } from "graphql";
-import { createSchema, createYoga, type Plugin } from "graphql-yoga";
+import { createSchema, createYoga, maskError, type Plugin } from "graphql-yoga";
 import type { RateLimiter } from "../app/rate-limit";
 import type { GraphQLContext } from "./context";
 import {
@@ -15,7 +15,7 @@ import {
   type QueryLimits,
   queryLimitsRule,
 } from "./limits";
-import { makeResolvers } from "./resolvers";
+import { makeResolvers, type ResolverDeps } from "./resolvers";
 
 export const GRAPHQL_PATH = "/graphql";
 
@@ -26,6 +26,8 @@ export interface GraphqlDeps {
   readonly limits?: QueryLimits;
   /** One limiter per root field, applied per client address. */
   readonly rateLimits?: Readonly<Record<string, RateLimiter>>;
+  /** The use cases behind the resolvers. Without them only the health query is served. */
+  readonly resolvers?: ResolverDeps;
 }
 
 interface NodeServerContext {
@@ -95,6 +97,18 @@ function rateLimitPlugin(
   };
 }
 
+/**
+ * A resolver throws a GraphQLError with a code for the errors a client may see: not signed in,
+ * not allowed, not found. Those pass through. Any other thrown error is masked as before.
+ */
+const keepDomainErrors: typeof maskError = (error, message, isDev) => {
+  const original = (error as { originalError?: unknown }).originalError;
+  if (original instanceof GraphQLError && typeof original.extensions.code === "string") {
+    return original;
+  }
+  return maskError(error, message, isDev);
+};
+
 /** The GraphQL endpoint as a node:http listener. Errors are masked before they reach a client. */
 export function makeGraphqlHandler(deps: GraphqlDeps) {
   const rules = [
@@ -106,13 +120,13 @@ export function makeGraphqlHandler(deps: GraphqlDeps) {
     ...(deps.rateLimits === undefined ? [] : [rateLimitPlugin(deps.rateLimits)]),
   ];
   return createYoga<NodeServerContext, GraphQLContext>({
-    schema: createSchema<GraphQLContext>({ typeDefs, resolvers: makeResolvers() }),
+    schema: createSchema<GraphQLContext>({ typeDefs, resolvers: makeResolvers(deps.resolvers) }),
     context: ({ request }) => deps.buildContext(request),
     plugins,
     graphqlEndpoint: GRAPHQL_PATH,
     landingPage: false,
     graphiql: false,
     logging: false,
-    maskedErrors: true,
+    maskedErrors: { maskError: keepDomainErrors },
   });
 }

@@ -23,7 +23,16 @@ function makeDeps(env: Record<string, string | undefined>) {
   });
   const migrate = vi.fn(async (_url: string): Promise<readonly string[]> => ["First1", "Second2"]);
   const provision = vi.fn(async (_url: string, _passwords: unknown): Promise<void> => {});
-  const database = { ping: vi.fn(async () => {}), close: vi.fn(async () => {}) };
+  const database = {
+    ping: vi.fn(async () => {}),
+    close: vi.fn(async () => {}),
+    transact: vi.fn(async () => {
+      throw new Error("not used here");
+    }),
+    withTenantTx: vi.fn(async () => {
+      throw new Error("not used here");
+    }),
+  };
   const connect = vi.fn(async (_url: string) => database);
   const onboard = vi.fn(
     async (_url: string, _input: OnboardGymInput): Promise<Result<OnboardedGym, ValidationError>> =>
@@ -107,7 +116,11 @@ const DATABASE_URL = "postgres://localhost/gym";
 
 describe("run in api mode", () => {
   it("starts the api, logs the port and answers the health check", async () => {
-    const { deps, lines, migrate } = makeDeps({ DATABASE_URL, PORT: "38271" });
+    const { deps, lines, migrate } = makeDeps({
+      DATABASE_URL,
+      PORT: "38271",
+      GOOGLE_CLIENT_IDS: "ios.apps.test",
+    });
     const server = await run(deps);
     if (server === null) throw new Error("expected a server");
     servers.push(server);
@@ -120,6 +133,24 @@ describe("run in api mode", () => {
       mode: "api",
     });
     expect(migrate).not.toHaveBeenCalled();
+  });
+
+  it("warns at boot when no Google client id is set, and still starts", async () => {
+    const { deps, lines } = makeDeps({ DATABASE_URL, PORT: "38273" });
+    const server = await run(deps);
+    if (server === null) throw new Error("expected a server");
+    servers.push(server);
+    const parsed = lines.map((line) => JSON.parse(line) as { msg: string; level?: string });
+    expect(parsed[0]).toMatchObject({
+      msg: "GOOGLE_CLIENT_IDS is not set, so every sign in is refused",
+      level: "warn",
+    });
+    await vi.waitFor(() => expect(server.listening).toBe(true));
+    await vi.waitFor(() =>
+      expect(lines.map((line) => (JSON.parse(line) as { msg: string }).msg)).toContain(
+        "api listening",
+      ),
+    );
   });
 
   it("connects to the database with the app url before listening", async () => {

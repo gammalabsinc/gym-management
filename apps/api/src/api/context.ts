@@ -1,4 +1,5 @@
 import type { RequestSession } from "../app/request-session";
+import { parseBearerToken } from "../domain/session";
 import type { RequestContext, RequestContextInput } from "./request-context";
 
 /** Who is calling. A session is an identity session until the person picks a gym. */
@@ -9,6 +10,8 @@ export type SessionResolver = (request: Request) => Promise<Session | null>;
 export interface GraphQLContext {
   readonly requestId: string;
   readonly session: Session | null;
+  /** The bearer token of this request, for the one mutation that revokes it. */
+  readonly token: string | null;
   /** Always taken from the session, never from client input. */
   readonly tenantId: string | null;
   readonly logger: RequestContext["logger"];
@@ -43,6 +46,12 @@ export function makeContextBuilder(
       requestIdHeader: request.headers.get(REQUEST_ID_HEADER),
       ...scope,
     });
-    return { requestId, session, tenantId, logger };
+    return {
+      requestId,
+      session,
+      token: parseBearerToken(request.headers.get(AUTHORIZATION_HEADER)),
+      tenantId,
+      logger,
+    };
   };
 }

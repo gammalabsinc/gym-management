@@ -7,7 +7,13 @@ import { clientAddress, makeGraphqlHandler, rootFieldNames } from "./graphql";
 
 const noop = () => {};
 const logger: Logger = { debug: noop, info: noop, warn: noop, error: noop, child: () => logger };
-const context: GraphQLContext = { requestId: "r1", session: null, tenantId: null, logger };
+const context: GraphQLContext = {
+  requestId: "r1",
+  session: null,
+  token: null,
+  tenantId: null,
+  logger,
+};
 
 function post(query: string) {
   return new Request("http://localhost/graphql", {

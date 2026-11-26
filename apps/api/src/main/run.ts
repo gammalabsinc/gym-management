@@ -39,8 +39,11 @@ export interface RunDeps {
 const DRAIN_TIMEOUT_MS = 25_000;
 
 async function startApi(config: Config, deps: RunDeps): Promise<Server> {
-  const app = composeApp({ config, write: deps.write });
   const database = await deps.connect(config.databaseUrl);
+  const app = composeApp({ config, database, write: deps.write });
+  if (config.googleClientIds.length === 0) {
+    app.logger.warn("GOOGLE_CLIENT_IDS is not set, so every sign in is refused");
+  }
   let shutdown: ReturnType<typeof makeShutdown> | undefined;
   const server = createHttpServer({
     graphql: app.graphql,

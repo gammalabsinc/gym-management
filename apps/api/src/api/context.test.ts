@@ -51,7 +51,7 @@ describe("makeContextBuilder", () => {
   });
 
   it("takes the tenant from the session and tags log lines with it", async () => {
-    const session = { subject: "s1", userId: "u1", tenantId: "t1" };
+    const session = { sessionId: "s1", subject: "s1", userId: "u1", tenantId: "t1" };
     const { build, lines } = setup(session);
     const ctx = await build(request());
     ctx.logger.info("hello");
@@ -61,7 +61,12 @@ describe("makeContextBuilder", () => {
   });
 
   it("leaves the tenant and user empty for an identity session", async () => {
-    const { build, lines } = setup({ subject: "s1", userId: null, tenantId: null });
+    const { build, lines } = setup({
+      sessionId: "s1",
+      subject: "s1",
+      userId: null,
+      tenantId: null,
+    });
     const ctx = await build(request());
     ctx.logger.info("hello");
     expect(ctx.tenantId).toBeNull();
@@ -69,8 +74,17 @@ describe("makeContextBuilder", () => {
     expect(lines[0]).not.toHaveProperty("userId");
   });
 
+  it("carries the bearer token of the request, and none without one", async () => {
+    const { build } = setup(null);
+    const withToken = new Request("http://localhost/graphql", {
+      headers: { authorization: "Bearer abc" },
+    });
+    expect((await build(withToken)).token).toBe("abc");
+    expect((await build(request())).token).toBeNull();
+  });
+
   it("ignores a tenant id the client sends in headers or query", async () => {
-    const { build } = setup({ subject: "s1", userId: "u1", tenantId: "t1" });
+    const { build } = setup({ sessionId: "s1", subject: "s1", userId: "u1", tenantId: "t1" });
     const sneaky = new Request("http://localhost/graphql?tenantId=t2", {
       headers: { "x-tenant-id": "t2", "x-tenant": "t2", host: "t2.example.com" },
     });

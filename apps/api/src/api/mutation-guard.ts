@@ -17,14 +17,18 @@ export interface MutationPolicy {
 export const MUTATION_POLICY: Readonly<Partial<Record<MutationName, MutationPolicy>>> = {};
 
 /**
+ * Mutations that belong to the person and not to a gym role: they sign in, sign out and pick a
+ * gym. They run before a gym is chosen, so no role permission can guard them. Each one checks
+ * the session itself, and none of them writes a gym audit event, because they change no gym data.
+ */
+export const IDENTITY_MUTATIONS: readonly MutationName[] = ["signIn", "signOut", "selectGym"];
+
+/**
  * Mutations that are in schema.graphql but not implemented yet. The ticket that implements one
  * moves it from this list to MUTATION_POLICY. Adding a name here to get past the guard test is
  * visible in review, and the test still fails for a name that is in neither place.
  */
 export const PENDING_MUTATIONS: readonly MutationName[] = [
-  "signIn",
-  "signOut",
-  "selectGym",
   "recordScan",
   "createMember",
   "updateMember",
@@ -47,6 +51,8 @@ export interface MutationGuardInput {
   readonly resolverMutations: readonly string[];
   readonly policy: Readonly<Record<string, MutationPolicy | undefined>>;
   readonly pending: readonly string[];
+  /** Mutations of the person, not of a gym role. They need no permission and no audit event. */
+  readonly identity?: readonly string[];
 }
 
 function isHeldByARole(permission: string): boolean {
@@ -72,21 +78,25 @@ export function checkMutationGuards(input: MutationGuardInput): string[] {
   const inSchema = new Set(input.schemaMutations);
   const policyNames = Object.keys(input.policy).filter((name) => input.policy[name] !== undefined);
   const pending = new Set(input.pending);
+  const identity = new Set(input.identity ?? []);
   const problems: string[] = [];
 
   for (const name of input.schemaMutations) {
     const declared = policyNames.includes(name);
-    if (declared && pending.has(name)) {
+    const isIdentity = identity.has(name);
+    if ((declared || isIdentity) && pending.has(name)) {
       problems.push(`${name}: listed as pending and also has a policy`);
-    } else if (!declared && !pending.has(name)) {
+    } else if (declared && isIdentity) {
+      problems.push(`${name}: is an identity mutation and also has a role policy`);
+    } else if (!declared && !isIdentity && !pending.has(name)) {
       problems.push(`${name}: no permission guard or audit event declared`);
     }
   }
-  for (const name of [...policyNames, ...pending]) {
+  for (const name of [...policyNames, ...pending, ...identity]) {
     if (!inSchema.has(name)) problems.push(`${name}: declared but not a mutation in the schema`);
   }
   for (const name of input.resolverMutations) {
-    if (!policyNames.includes(name)) {
+    if (!policyNames.includes(name) && !identity.has(name)) {
       problems.push(`${name}: has a resolver but no entry in MUTATION_POLICY`);
     }
   }

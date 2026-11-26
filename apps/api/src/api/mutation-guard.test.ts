@@ -3,12 +3,15 @@ import { buildSchema } from "graphql";
 import { describe, expect, it } from "vitest";
 import {
   checkMutationGuards,
+  IDENTITY_MUTATIONS,
   MUTATION_POLICY,
   type MutationGuardInput,
   type MutationPolicy,
   PENDING_MUTATIONS,
 } from "./mutation-guard";
-import { makeResolvers } from "./resolvers";
+import { makeResolvers, type ResolverDeps } from "./resolvers";
+
+const fakeDeps = {} as ResolverDeps;
 
 const GUARDED: MutationPolicy = { permission: "payment.record", auditAction: "payment.record" };
 
@@ -25,18 +28,53 @@ function input(overrides: Partial<MutationGuardInput> = {}): MutationGuardInput 
 describe("the real schema", () => {
   it("has every mutation guarded and audited, or not implemented yet", () => {
     const fields = buildSchema(typeDefs).getMutationType()?.getFields() ?? {};
-    const resolvers = makeResolvers().Mutation ?? {};
+    const resolvers = makeResolvers(fakeDeps).Mutation ?? {};
     const problems = checkMutationGuards({
       schemaMutations: Object.keys(fields),
       resolverMutations: Object.keys(resolvers),
       policy: MUTATION_POLICY,
       pending: PENDING_MUTATIONS,
+      identity: IDENTITY_MUTATIONS,
     });
     expect(problems).toEqual([]);
   });
 
   it("finds mutations to check", () => {
     expect(Object.keys(buildSchema(typeDefs).getMutationType()?.getFields() ?? {})).not.toEqual([]);
+  });
+});
+
+describe("identity mutations", () => {
+  const withIdentity = (overrides: Partial<MutationGuardInput> = {}) =>
+    input({
+      schemaMutations: ["recordPayment", "createMember", "signIn"],
+      pending: ["createMember"],
+      identity: ["signIn"],
+      ...overrides,
+    });
+
+  it("accepts a resolver for a mutation of the person, with no role policy", () => {
+    expect(
+      checkMutationGuards(withIdentity({ resolverMutations: ["recordPayment", "signIn"] })),
+    ).toEqual([]);
+  });
+
+  it("fails an identity mutation that is also pending", () => {
+    expect(checkMutationGuards(withIdentity({ pending: ["createMember", "signIn"] }))).toEqual([
+      "signIn: listed as pending and also has a policy",
+    ]);
+  });
+
+  it("fails an identity mutation that also has a role policy", () => {
+    expect(
+      checkMutationGuards(withIdentity({ policy: { recordPayment: GUARDED, signIn: GUARDED } })),
+    ).toEqual(["signIn: is an identity mutation and also has a role policy"]);
+  });
+
+  it("fails an identity name that is not in the schema", () => {
+    expect(checkMutationGuards(withIdentity({ identity: ["signIn", "ghost"] }))).toEqual([
+      "ghost: declared but not a mutation in the schema",
+    ]);
   });
 });
 

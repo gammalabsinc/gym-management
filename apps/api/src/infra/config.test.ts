@@ -47,7 +47,25 @@ describe("parseConfig", () => {
       port: 3000,
       logLevel: "info",
       databaseUrl: validEnv.DATABASE_URL,
+      googleClientIds: [],
+      sessionDays: 30,
     });
+  });
+
+  it("reads the Google client ids as a list and the session length in days", () => {
+    const config = parseConfig({
+      ...validEnv,
+      GOOGLE_CLIENT_IDS: " ios-1.apps.test , android-2.apps.test,, ",
+      SESSION_DAYS: "7",
+    });
+    expect(config.googleClientIds).toEqual(["ios-1.apps.test", "android-2.apps.test"]);
+    expect(config.sessionDays).toBe(7);
+  });
+
+  it("refuses a session length that is not between 1 and 365 days", () => {
+    expect(problemsOf({ ...validEnv, SESSION_DAYS: "0" })).toEqual([
+      expect.stringMatching(/^SESSION_DAYS: /),
+    ]);
   });
 
   it("reads every variable", () => {
