@@ -12,12 +12,14 @@ import type { makeGetMember, makeListMembers } from "../app/member-queries";
 import type { makeGetOwnMember, makeGetOwnVisits } from "../app/member-self-service";
 import type { makeListPlans } from "../app/plans";
 import type { makePreviewPayment } from "../app/preview-payment";
+import type { makeListStaff } from "../app/role-management";
 import type { SignedIn } from "../app/sign-in";
 import type { makeGetTenant } from "../app/tenant-settings";
 import type { makeWhoAmI } from "../app/who-am-i";
 import { forbidden, type UnauthenticatedError } from "../domain/errors";
 import { hasPermission } from "../domain/permissions";
 import type { Result } from "../domain/result";
+import { type AdminMutationDeps, makeAdminMutations } from "./admin-mutations";
 import type { GraphQLContext } from "./context";
 import { parseInput } from "./input";
 import {
@@ -33,6 +35,7 @@ import {
   toGqlPeriod,
   toGqlPlan,
   toGqlPreview,
+  toGqlStaff,
   toGqlTenant,
   toGqlVisit,
   toGraphQLError,
@@ -43,7 +46,8 @@ import { mutationArgs } from "./mutation-inputs";
 import { requireGym, requireSession } from "./session-guard";
 
 /** The use cases the resolvers call. The composition root builds them with real adapters. */
-export interface ResolverDeps extends MemberMutationDeps {
+export interface ResolverDeps extends MemberMutationDeps, AdminMutationDeps {
+  readonly listStaff: ReturnType<typeof makeListStaff>;
   readonly signIn: (idToken: string) => Promise<Result<SignedIn, UnauthenticatedError>>;
   readonly signOut: (token: string) => Promise<void>;
   readonly listMyGyms: ReturnType<typeof makeListMyGyms>;
@@ -154,6 +158,11 @@ export function makeResolvers(deps?: ResolverDeps): Resolvers<GraphQLContext> {
         if (!preview.ok) throw toGraphQLError(preview.error);
         return toGqlPreview(preview.value);
       },
+      staff: async (_parent, _args, ctx) => {
+        const staff = await deps.listStaff(undefined, requireGym(ctx));
+        if (!staff.ok) throw toGraphQLError(staff.error);
+        return staff.value.map(toGqlStaff);
+      },
       member: async (_parent, args, ctx) => {
         const caller = requireGym(ctx);
         const input = { memberId: args.id };
@@ -174,6 +183,7 @@ export function makeResolvers(deps?: ResolverDeps): Resolvers<GraphQLContext> {
     },
     Mutation: {
       ...makeMemberMutations(deps),
+      ...makeAdminMutations(deps),
       signIn: async (_parent, args) => {
         const parsed = parseInput(mutationArgs.signIn, args);
         if (!parsed.ok)

@@ -13,17 +13,22 @@ import type {
   PaymentPreview,
   Plan,
   ReferralSide,
+  ScanPayload,
+  StaffUser,
   Tenant,
   UserError,
   Visit,
   VisitPage,
 } from "@gym/graphql-schema";
 import { GraphQLError } from "graphql";
+import type { AddedDiscount, EndedDiscount } from "../app/manual-discounts";
 import type { DiscountView, InvoiceView, LedgerPage } from "../app/member-ledger";
 import type { MemberPage as MemberPageResult } from "../app/member-queries";
 import type { AttendanceRecord, LedgerPaymentRow, LedgerPeriodRow } from "../app/ports";
 import type { PaymentPreview as PaymentPreviewResult } from "../app/preview-payment";
 import type { RecordedPayment } from "../app/record-payment";
+import type { RecognizedScan } from "../app/record-scan";
+import { LAST_OWNER_MESSAGE, type StaffMember } from "../app/role-management";
 import type { TenantView } from "../app/tenant-settings";
 import {
   ALREADY_VOID_MESSAGE,
@@ -86,6 +91,7 @@ const USER_ERROR_CODE: Readonly<Record<DomainErrorKind, ErrorCode>> = {
 const CONFLICT_CODE_BY_MESSAGE: Readonly<Record<string, ErrorCode>> = {
   [ALREADY_VOID_MESSAGE]: "ALREADY_VOID",
   [HAS_ALLOCATIONS_MESSAGE]: "HAS_ALLOCATIONS",
+  [LAST_OWNER_MESSAGE]: "LAST_OWNER",
 };
 
 function codeOf(error: DomainError): ErrorCode {
@@ -309,4 +315,58 @@ export function toGqlVoidedInvoice(invoice: VoidedInvoice): Invoice {
     isVoid: true,
     voidReason: invoice.reason,
   });
+}
+
+export function toGqlStaff(user: StaffMember): StaffUser {
+  return {
+    userId: user.userId,
+    name: user.name,
+    email: user.email,
+    roles: user.roles.map(toGqlRole),
+    hasSignedIn: user.hasSignedIn,
+  };
+}
+
+export function toGqlAddedDiscount(discount: AddedDiscount): Discount {
+  return leaveOut<Discount>({
+    id: discount.id,
+    memberId: discount.memberId,
+    kind: "MANUAL",
+    amount: discount.amount,
+    isRecurring: discount.isRecurring,
+    startsOn: discount.startsOn,
+    isActive: true,
+    isConsumed: false,
+  });
+}
+
+export function toGqlEndedDiscount(discount: EndedDiscount): Discount {
+  return leaveOut<Discount>({
+    id: discount.id,
+    memberId: discount.memberId,
+    endsOn: discount.endsOn,
+  });
+}
+
+export function toGqlScan(scan: RecognizedScan): Pick<ScanPayload, "visit" | "member"> {
+  const { visit, member } = scan;
+  return {
+    visit: {
+      id: visit.id,
+      memberId: visit.memberId,
+      scannedAt: visit.scannedAt,
+      localDate: visit.localDate,
+      isDuplicate: visit.isDuplicate,
+      statusAtScan: visit.statusAtScan.toUpperCase() as Visit["statusAtScan"],
+      source: visit.source.toUpperCase() as Visit["source"],
+    },
+    member: leaveOut<Member>({
+      id: member.id,
+      name: member.name,
+      standing: member.standing.toUpperCase() as Member["standing"],
+      paidThrough: member.paidThrough,
+      status: member.status.toUpperCase() as Member["status"],
+      leftOn: member.status === "cancelled" ? member.statusChangedOn : null,
+    }),
+  };
 }

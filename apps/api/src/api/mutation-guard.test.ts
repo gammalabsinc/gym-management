@@ -133,6 +133,15 @@ describe("checkMutationGuards", () => {
     expect(problems).toEqual(["recordPayment: no audit action declared"]);
   });
 
+  it("accepts an empty audit action when an exemption says why", () => {
+    const exempt = { ...GUARDED, auditAction: "", auditExemption: "The row is the record" };
+    expect(checkMutationGuards(input({ policy: { recordPayment: exempt } }))).toEqual([]);
+  });
+
+  it("keeps the pending list empty once every mutation is served", () => {
+    expect(PENDING_MUTATIONS).toEqual([]);
+  });
+
   it("reports every problem at once", () => {
     const bad = { permission: "nobody.has.this", auditAction: "" } as unknown as MutationPolicy;
     const problems = checkMutationGuards(input({ policy: { recordPayment: bad } }));
