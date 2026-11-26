@@ -9,6 +9,9 @@ import { createCardService } from "./card/card";
 import type { CardDeps } from "./card/context";
 import type { RuntimeConfig } from "./config/build-config";
 import { createGyms, type Gyms } from "./gyms";
+import type { CameraPort } from "./scanner/camera";
+import type { ScannerDeps } from "./scanner/context";
+import { createScanService } from "./scanner/scan";
 
 /** The native pieces, passed in from the entry point so tests need no native module. */
 export interface Platform {
@@ -18,6 +21,7 @@ export interface Platform {
   readonly google: GoogleSigninLike;
   readonly storage: KeyValueLike;
   readonly brightness: BrightnessLike;
+  readonly camera: CameraPort;
 }
 
 export interface Services {
@@ -26,6 +30,7 @@ export interface Services {
   readonly auth: Auth;
   readonly gyms: Gyms;
   readonly card: CardDeps;
+  readonly scanner: ScannerDeps;
 }
 
 export function newRequestId(): string {
@@ -69,5 +74,12 @@ export function composeServices(
     if (store.getSession().status !== "signedIn") void cache.clear();
   });
   const service = createCardService({ client, cache, store, now: () => new Date() });
-  return { store, client, auth, gyms, card: { service, brightness: platform.brightness } };
+  return {
+    store,
+    client,
+    auth,
+    gyms,
+    card: { service, brightness: platform.brightness },
+    scanner: { service: createScanService({ client }), camera: platform.camera },
+  };
 }

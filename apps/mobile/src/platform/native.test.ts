@@ -7,6 +7,7 @@ vi.mock("expo-secure-store", () => ({
   deleteItemAsync: vi.fn(),
 }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: vi.fn() } }));
+vi.mock("expo-camera", () => ({ CameraView: () => null, useCameraPermissions: vi.fn() }));
 vi.mock("expo-brightness", () => ({ getBrightnessAsync: vi.fn(), setBrightnessAsync: vi.fn() }));
 vi.mock("@react-native-google-signin/google-signin", () => ({
   GoogleSignin: { configure: vi.fn() },
@@ -17,6 +18,7 @@ describe("native platform", () => {
     const { nativePlatform } = await import("./native");
     expect(nativePlatform.accessible).toBe(6);
     expect(typeof nativePlatform.google.configure).toBe("function");
+    expect(typeof nativePlatform.camera.openSettings).toBe("function");
     expect(typeof nativePlatform.storage.getItem).toBe("function");
     expect(typeof nativePlatform.brightness.setBrightnessAsync).toBe("function");
     expect(typeof nativePlatform.secureStore.getItemAsync).toBe("function");

@@ -9,6 +9,7 @@ import { ConfigProvider } from "./config/context";
 import { type ConstantsLike, loadRuntimeConfig } from "./config/load";
 import { ProfileMarker } from "./config/ProfileMarker";
 import { RootNavigator } from "./navigation/RootNavigator";
+import { ScannerProvider } from "./scanner/context";
 import { composeServices, type Platform } from "./services";
 
 export interface AppProps {
@@ -53,7 +54,9 @@ function Authenticated(props: { readonly config: RuntimeConfig; readonly platfor
         <ProfileMarker profile={config.profile} />
         <GymsProvider gyms={services.gyms}>
           <CardProvider deps={services.card}>
-            {restored ? <RootNavigator session={session} /> : null}
+            <ScannerProvider deps={services.scanner}>
+              {restored ? <RootNavigator session={session} /> : null}
+            </ScannerProvider>
           </CardProvider>
         </GymsProvider>
       </AuthProvider>

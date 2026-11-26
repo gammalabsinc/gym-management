@@ -3,6 +3,7 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as Brightness from "expo-brightness";
 import * as SecureStore from "expo-secure-store";
 import type { Platform } from "../services";
+import { nativeCamera } from "./camera";
 
 /** The real native libraries. Only the entry point imports this file. */
 export const nativePlatform: Platform = {
@@ -11,4 +12,5 @@ export const nativePlatform: Platform = {
   google: GoogleSignin,
   storage: AsyncStorage,
   brightness: Brightness,
+  camera: nativeCamera,
 };
