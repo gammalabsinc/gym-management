@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { AddMember } from "../members/AddMember";
 import { EditMember } from "../members/EditMember";
-import { PlaceholderScreen } from "../screens/PlaceholderScreen";
-import { Button } from "../ui/Button";
 import { CustomersScreen } from "./CustomersScreen";
 import { useCustomersService } from "./context";
 import { CustomerDetail } from "./detail/CustomerDetail";
+import { PaymentForm } from "./payment/PaymentForm";
 import { useCustomers, useDebounced } from "./useCustomers";
 
 export const SEARCH_DELAY_MS = 300;
@@ -14,11 +13,10 @@ type Route =
   | { readonly kind: "list" }
   | { readonly kind: "add" }
   | { readonly kind: "detail"; readonly id: string }
-  /** Record payment is built in a later ticket. */
   | { readonly kind: "payment"; readonly id: string }
   | { readonly kind: "edit"; readonly id: string };
 
-/** The Customers tab: the list, the detail of one customer, and add and edit member. Payment comes later. */
+/** The Customers tab: the list, the detail of one customer, and add and edit member. */
 export function Customers(props: { readonly viewer: "staff" | "owner" }) {
   const service = useCustomersService();
   const [route, setRoute] = useState<Route>({ kind: "list" });
@@ -60,15 +58,14 @@ export function Customers(props: { readonly viewer: "staff" | "owner" }) {
     );
   }
   if (route.kind === "payment") {
+    const back: Route = { kind: "detail", id: route.id };
     return (
-      <>
-        <PlaceholderScreen title="Record payment" />
-        <Button
-          label="Back to customer"
-          kind="secondary"
-          onPress={() => setRoute({ kind: "detail", id: route.id })}
-        />
-      </>
+      <PaymentForm
+        memberId={route.id}
+        now={() => new Date()}
+        onCancel={() => setRoute(back)}
+        onSaved={() => setRoute(back)}
+      />
     );
   }
   return (
