@@ -6,7 +6,15 @@ import { createHttpServer } from "./server";
 function setup() {
   const lines: string[] = [];
   const app = composeApp({
-    config: { logLevel: "info", nodeEnv: "test" },
+    config: { logLevel: "info", nodeEnv: "test", googleClientIds: [], sessionDays: 30 },
+    database: {
+      transact: async () => {
+        throw new Error("no database in this test");
+      },
+      withTenantTx: async () => {
+        throw new Error("no database in this test");
+      },
+    },
     write: (line) => lines.push(line),
   });
   return { app, lines };

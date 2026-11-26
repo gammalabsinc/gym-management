@@ -127,10 +127,14 @@ describe("tenant resolution on a real database", () => {
     const userId = await person(alpha, subject, ["staff"]);
     const session = await signedIn(subject);
 
-    expect(await resolve()(session.header)).toEqual({ subject, userId: null, tenantId: null });
+    expect(await resolve()(session.header)).toMatchObject({
+      subject,
+      userId: null,
+      tenantId: null,
+    });
     const picked = await selectGym()({ tenantId: alpha }, session);
     expect(picked).toMatchObject({ ok: true, value: { tenantId: alpha, roles: ["staff"] } });
-    expect(await resolve()(session.header)).toEqual({ subject, userId, tenantId: alpha });
+    expect(await resolve()(session.header)).toMatchObject({ subject, userId, tenantId: alpha });
   });
 
   it("refuses a valid session that holds no role in the gym, and binds nothing", async () => {
@@ -178,7 +182,7 @@ describe("tenant resolution on a real database", () => {
 
     await selectGym()({ tenantId: first }, session);
     await selectGym()({ tenantId: second }, session);
-    expect(await resolve()(session.header)).toEqual({
+    expect(await resolve()(session.header)).toMatchObject({
       subject,
       userId: secondUser,
       tenantId: second,
@@ -193,7 +197,11 @@ describe("tenant resolution on a real database", () => {
     await selectGym()({ tenantId: alpha }, session);
 
     await db.admin.query("DELETE FROM user_roles WHERE user_id = $1", [userId]);
-    expect(await resolve()(session.header)).toEqual({ subject, userId: null, tenantId: null });
+    expect(await resolve()(session.header)).toMatchObject({
+      subject,
+      userId: null,
+      tenantId: null,
+    });
   });
 
   it("does not bind a session that was signed out, and resolves it to nobody", async () => {

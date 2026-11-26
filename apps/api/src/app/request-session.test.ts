@@ -50,18 +50,33 @@ describe("resolving the session of a request", () => {
 
   it("is an identity session while no gym is picked", async () => {
     const { resolve, checked } = setup({ sessionId: "s", subject: "sub", gymId: null });
-    expect(await resolve("Bearer abc")).toEqual({ subject: "sub", userId: null, tenantId: null });
+    expect(await resolve("Bearer abc")).toEqual({
+      sessionId: "s",
+      subject: "sub",
+      userId: null,
+      tenantId: null,
+    });
     expect(checked).toEqual([]);
   });
 
   it("carries the bound gym and the user row there while the role still holds", async () => {
     const { resolve, checked } = setup({ sessionId: "s", subject: "sub", gymId: GYM });
-    expect(await resolve("Bearer abc")).toEqual({ subject: "sub", userId: "u1", tenantId: GYM });
+    expect(await resolve("Bearer abc")).toEqual({
+      sessionId: "s",
+      subject: "sub",
+      userId: "u1",
+      tenantId: GYM,
+    });
     expect(checked).toEqual([`sub:${GYM}`]);
   });
 
   it("falls back to an identity session when the role was lost after the gym was picked", async () => {
     const { resolve } = setup({ sessionId: "s", subject: "sub", gymId: GYM }, false);
-    expect(await resolve("Bearer abc")).toEqual({ subject: "sub", userId: null, tenantId: null });
+    expect(await resolve("Bearer abc")).toEqual({
+      sessionId: "s",
+      subject: "sub",
+      userId: null,
+      tenantId: null,
+    });
   });
 });

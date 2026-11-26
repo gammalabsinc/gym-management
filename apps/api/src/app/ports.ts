@@ -912,3 +912,22 @@ export interface DiscountUnit {
   readonly tenants: Pick<TenantStore, "find">;
   readonly audit: AuditLog;
 }
+
+/** One user of one gym as the app shows "me": the user row, its roles and the member record it owns. */
+export interface WhoAmIRecord {
+  readonly userId: string;
+  readonly name: string | null;
+  readonly email: string;
+  readonly roles: readonly Role[];
+  readonly memberId: string | null;
+}
+
+/** Reads the caller's own user row. It belongs to a tenant transaction. */
+export interface WhoAmIStore {
+  /** Null when the user is switched off or holds no row in this gym. */
+  find(userId: string): Promise<WhoAmIRecord | null>;
+}
+
+export interface WhoAmIUnit {
+  readonly me: WhoAmIStore;
+}
