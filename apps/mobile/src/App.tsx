@@ -8,6 +8,7 @@ import { ConfigError, type RuntimeConfig } from "./config/build-config";
 import { ConfigProvider } from "./config/context";
 import { type ConstantsLike, loadRuntimeConfig } from "./config/load";
 import { ProfileMarker } from "./config/ProfileMarker";
+import { CustomersProvider } from "./customers/context";
 import { RootNavigator } from "./navigation/RootNavigator";
 import { ScannerProvider } from "./scanner/context";
 import { composeServices, type Platform } from "./services";
@@ -55,7 +56,9 @@ function Authenticated(props: { readonly config: RuntimeConfig; readonly platfor
         <GymsProvider gyms={services.gyms}>
           <CardProvider deps={services.card}>
             <ScannerProvider deps={services.scanner}>
-              {restored ? <RootNavigator session={session} /> : null}
+              <CustomersProvider service={services.customers}>
+                {restored ? <RootNavigator session={session} /> : null}
+              </CustomersProvider>
             </ScannerProvider>
           </CardProvider>
         </GymsProvider>

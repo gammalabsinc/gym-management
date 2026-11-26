@@ -2,6 +2,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { type Destination, destinationFor, type Session } from "../auth/session";
 import { MemberCard } from "../card/MemberCard";
+import { Customers } from "../customers/Customers";
 import { Scanner } from "../scanner/Scanner";
 import { GymPicker } from "../screens/GymPicker";
 import { SignIn } from "../screens/SignIn";
@@ -9,7 +10,7 @@ import { TabSet } from "./TabSet";
 import { adminTabsFor, CUSTOMER_TABS } from "./tabs";
 
 const CUSTOMER_SCREENS = { Card: () => <MemberCard /> };
-const ADMIN_SCREENS = { Scan: () => <Scanner /> };
+const ADMIN_SCREENS = { Scan: () => <Scanner />, Customers: () => <Customers /> };
 
 function Screen(props: { readonly destination: Destination; readonly session: Session }) {
   switch (props.destination) {
