@@ -13,6 +13,8 @@ export const LIMITS = {
   reason: 500,
   photoRef: 512,
   url: 2048,
+  /** A Google ID token is a signed JWT of 1 to 2 kilobytes. */
+  idToken: 4096,
   /** GraphQL Int is a signed 32 bit integer. */
   maxInt: 2_147_483_647,
   maxDays: 366,

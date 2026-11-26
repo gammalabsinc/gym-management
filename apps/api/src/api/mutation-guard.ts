@@ -22,6 +22,8 @@ export const MUTATION_POLICY: Readonly<Partial<Record<MutationName, MutationPoli
  * visible in review, and the test still fails for a name that is in neither place.
  */
 export const PENDING_MUTATIONS: readonly MutationName[] = [
+  "signIn",
+  "signOut",
   "selectGym",
   "recordScan",
   "createMember",

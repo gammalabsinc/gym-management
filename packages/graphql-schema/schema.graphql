@@ -327,6 +327,9 @@ input SettingsInput {
 }
 
 type Mutation {
+  signIn(idToken: String!): SignInPayload! # public, rate limited, exchanges a Google ID token for an app session
+  signOut: Boolean! # revokes the bearer token of this request, true even when it was already revoked
+
   selectGym(tenantId: ID!): SelectGymPayload! # identity session
 
   recordScan(barcode: String!, source: ScanSource = STAFF_APP): ScanPayload! # scan.checkin
@@ -348,6 +351,12 @@ type Mutation {
   setRole(userId: ID!, role: Role!, isOn: Boolean!): StaffPayload! # roles.write
 }
 
+type SignInPayload {
+  token: String # shown once, kept in device secure storage, only its hash is stored
+  expiresAt: DateTime
+  gyms: [Gym!]!
+  errors: [UserError!]!
+}
 type SelectGymPayload {
   me: Me
   tenant: Tenant
