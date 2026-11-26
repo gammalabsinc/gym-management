@@ -6,6 +6,8 @@ import type { MembersService } from "../members/service";
 import { Customers } from "./Customers";
 import { CustomersProvider } from "./context";
 import type { CustomersService } from "./list";
+import { PaymentProvider } from "./payment/context";
+import type { PaymentService } from "./payment/service";
 
 vi.mock("./detail/CustomerDetail", () => ({
   CustomerDetail: (props: {
@@ -57,6 +59,26 @@ const member = {
   referredByName: null,
 };
 
+const payment: PaymentService = {
+  newRequestId: () => "req-1",
+  load: async () => ({
+    status: "ready",
+    setup: {
+      memberName: "Sam Lee",
+      balanceDue: 0,
+      paidThrough: null,
+      credit: 0,
+      currency: "USD",
+      timezone: "UTC",
+    },
+  }),
+  preview: async () => ({
+    status: "preview",
+    preview: { invoicesCovered: 1, paidThroughAfter: null, creditAfter: 0 },
+  }),
+  record: async () => ({ status: "recorded" }),
+};
+
 function mount(update = vi.fn(async () => ({ status: "saved" as const, memberId: "m1" }))) {
   const members: MembersService = {
     loadFees: vi.fn(),
@@ -72,7 +94,11 @@ function mount(update = vi.fn(async () => ({ status: "saved" as const, memberId:
       createElement(
         MembersProvider,
         { service: members },
-        createElement(Customers, { viewer: "owner" }),
+        createElement(
+          PaymentProvider,
+          { service: payment },
+          createElement(Customers, { viewer: "owner" }),
+        ),
       ),
     ),
   );
@@ -110,12 +136,24 @@ describe("Customers routes", () => {
     expect(screen.getByText("Detail m1")).toBeTruthy();
   });
 
-  it("shows the payment placeholder and goes back to the detail", async () => {
+  it("opens the payment form and goes back to the detail when it is cancelled", async () => {
     mount();
     await openDetail();
     fireEvent.click(screen.getByText("Pay"));
-    expect(screen.getByText("Record payment")).toBeTruthy();
-    fireEvent.click(screen.getByLabelText("Back to customer"));
+    await settle();
+    expect(screen.getByLabelText("Amount")).toBeTruthy();
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(screen.getByText("Detail m1")).toBeTruthy();
+  });
+
+  it("goes back to the detail after a payment is recorded", async () => {
+    mount();
+    await openDetail();
+    fireEvent.click(screen.getByText("Pay"));
+    await settle();
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "10" } });
+    fireEvent.click(screen.getByText("Record payment", { selector: "button span" }));
+    await settle();
     expect(screen.getByText("Detail m1")).toBeTruthy();
   });
 });

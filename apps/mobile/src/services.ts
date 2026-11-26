@@ -12,6 +12,7 @@ import type { RuntimeConfig } from "./config/build-config";
 import { createDetailService, type DetailService } from "./customers/detail/service";
 import type { CustomersService } from "./customers/list";
 import { createCustomersService } from "./customers/list";
+import { createPaymentService, type PaymentService } from "./customers/payment/service";
 import { createGyms, type Gyms } from "./gyms";
 import { createMembersService, type MembersService } from "./members/service";
 import { createProfileService, type ProfileService } from "./profile/service";
@@ -46,6 +47,7 @@ export interface Services {
   readonly profile: ProfileService;
   readonly detail: DetailService;
   readonly members: MembersService;
+  readonly payment: PaymentService;
 }
 
 export function newRequestId(): string {
@@ -103,5 +105,6 @@ export function composeServices(
     profile: createProfileService({ client }),
     detail: createDetailService({ client }),
     members: createMembersService({ client }),
+    payment: createPaymentService({ client, newRequestId }),
   };
 }
