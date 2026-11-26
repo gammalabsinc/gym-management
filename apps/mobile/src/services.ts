@@ -12,6 +12,7 @@ import type { RuntimeConfig } from "./config/build-config";
 import type { CustomersService } from "./customers/list";
 import { createCustomersService } from "./customers/list";
 import { createGyms, type Gyms } from "./gyms";
+import { createProfileService, type ProfileService } from "./profile/service";
 import type { CameraPort } from "./scanner/camera";
 import type { ScannerDeps } from "./scanner/context";
 import { createScanService } from "./scanner/scan";
@@ -40,6 +41,7 @@ export interface Services {
   readonly settings: SettingsService;
   readonly staff: StaffService;
   readonly attendance: AttendanceService;
+  readonly profile: ProfileService;
 }
 
 export function newRequestId(): string {
@@ -94,5 +96,6 @@ export function composeServices(
     settings: createSettingsService({ client }),
     staff: createStaffService({ client }),
     attendance: createAttendanceService({ client }),
+    profile: createProfileService({ client }),
   };
 }

@@ -4,6 +4,7 @@ import { Attendance } from "../attendance/Attendance";
 import { type Destination, destinationFor, type Session } from "../auth/session";
 import { MemberCard } from "../card/MemberCard";
 import { Customers } from "../customers/Customers";
+import { Profile } from "../profile/Profile";
 import { Scanner } from "../scanner/Scanner";
 import { GymPicker } from "../screens/GymPicker";
 import { SignIn } from "../screens/SignIn";
@@ -12,7 +13,11 @@ import { Staff } from "../staff/Staff";
 import { TabSet } from "./TabSet";
 import { adminTabsFor, CUSTOMER_TABS } from "./tabs";
 
-const CUSTOMER_SCREENS = { Card: () => <MemberCard />, Visits: () => <Attendance /> };
+const CUSTOMER_SCREENS = {
+  Card: () => <MemberCard />,
+  Visits: () => <Attendance />,
+  Profile: () => <Profile />,
+};
 const STAFF_SCREENS = {
   Scan: () => <Scanner />,
   Customers: () => <Customers />,

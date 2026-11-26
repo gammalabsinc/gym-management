@@ -80,7 +80,10 @@ export function Modal(
 
 export const StyleSheet = { create: <T,>(styles: T): T => styles };
 
-export const Linking = { openSettings: async (): Promise<void> => undefined };
+export const Linking = {
+  openSettings: async (): Promise<void> => undefined,
+  openURL: async (_url: string): Promise<void> => undefined,
+};
 
 /** Renders every row. Pull to refresh and end reached show as buttons, so tests can trigger them. */
 export function FlatList<T>(props: {
