@@ -23,7 +23,14 @@ import type { DiscountView, InvoiceView, LedgerPage } from "../app/member-ledger
 import type { MemberPage as MemberPageResult } from "../app/member-queries";
 import type { AttendanceRecord, LedgerPaymentRow, LedgerPeriodRow } from "../app/ports";
 import type { PaymentPreview as PaymentPreviewResult } from "../app/preview-payment";
+import type { RecordedPayment } from "../app/record-payment";
 import type { TenantView } from "../app/tenant-settings";
+import {
+  ALREADY_VOID_MESSAGE,
+  HAS_ALLOCATIONS_MESSAGE,
+  type VoidedInvoice,
+  type VoidedPayment,
+} from "../app/voids";
 import type { Me as MeRecord } from "../app/who-am-i";
 import type { DomainError, DomainErrorKind } from "../domain/errors";
 import type { GymSummary } from "../domain/gym-picker";
@@ -75,16 +82,35 @@ const USER_ERROR_CODE: Readonly<Record<DomainErrorKind, ErrorCode>> = {
   conflict: "CONFLICT",
 };
 
-/** A domain error as the `errors` list of a mutation payload. */
-export function toUserErrors(error: DomainError): UserError[] {
+/** The conflicts the app tells apart by their own code, found by the message that is written for them. */
+const CONFLICT_CODE_BY_MESSAGE: Readonly<Record<string, ErrorCode>> = {
+  [ALREADY_VOID_MESSAGE]: "ALREADY_VOID",
+  [HAS_ALLOCATIONS_MESSAGE]: "HAS_ALLOCATIONS",
+};
+
+function codeOf(error: DomainError): ErrorCode {
+  return error.kind === "conflict"
+    ? (CONFLICT_CODE_BY_MESSAGE[error.message] ?? "CONFLICT")
+    : USER_ERROR_CODE[error.kind];
+}
+
+/**
+ * A domain error as the `errors` list of a mutation payload. The field is the last name of the
+ * issue's path, so `input.email` is `email`, and `rename` maps the domain's own names to the
+ * names of the GraphQL input (the domain says `fullName` where the schema says `name`).
+ */
+export function toUserErrors(
+  error: DomainError,
+  rename: Readonly<Record<string, string>> = {},
+): UserError[] {
   const issues = error.kind === "validation" ? error.issues : [];
-  const code = USER_ERROR_CODE[error.kind];
+  const code = codeOf(error);
   if (issues.length === 0) return [{ code, field: null, message: error.message }];
-  return issues.map((issue) => ({
-    code,
-    field: issue.path.join(".") || null,
-    message: issue.message,
-  }));
+  return issues.map((issue) => {
+    const name = issue.path.at(-1);
+    const field = name === undefined ? null : (rename[String(name)] ?? String(name));
+    return { code, field, message: issue.message };
+  });
 }
 
 /** A domain error thrown out of a query, with the same codes the error mapper uses. */
@@ -248,4 +274,39 @@ export function toGqlPreview(preview: PaymentPreviewResult): PaymentPreview {
     paidThroughAfter: preview.paidThroughAfter,
     creditAfter: preview.creditAfter,
   };
+}
+
+export function toGqlRecordedPayment(payment: RecordedPayment): Payment {
+  return {
+    id: payment.id,
+    memberId: payment.memberId,
+    amount: payment.amount,
+    method: payment.method.toUpperCase() as Payment["method"],
+    paidOn: payment.paidOn,
+    submittedAt: payment.submittedAt,
+    proofLink: payment.proofLink,
+    recordedBy: payment.recordedBy,
+    isVoid: payment.isVoid,
+    voidReason: payment.voidReason,
+    allocations: payment.allocations.map((a) => ({ invoiceId: a.invoiceId, amount: a.amount })),
+  };
+}
+
+export function toGqlVoidedPayment(payment: VoidedPayment): Payment {
+  return leaveOut<Payment>({
+    id: payment.id,
+    memberId: payment.memberId,
+    amount: payment.amount,
+    isVoid: true,
+    voidReason: payment.reason,
+  });
+}
+
+export function toGqlVoidedInvoice(invoice: VoidedInvoice): Invoice {
+  return leaveOut<Invoice>({
+    id: invoice.id,
+    memberId: invoice.memberId,
+    isVoid: true,
+    voidReason: invoice.reason,
+  });
 }

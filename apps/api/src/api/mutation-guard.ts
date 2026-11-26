@@ -1,4 +1,8 @@
 import type { Mutation } from "@gym/graphql-schema";
+import { MEMBER_CREATED } from "../app/create-member";
+import { MEMBER_UPDATED } from "../app/edit-member";
+import { PAYMENT_RECORDED } from "../app/record-payment";
+import { INVOICE_VOIDED, PAYMENT_VOIDED } from "../app/voids";
 import { hasPermission, type Permission, ROLES } from "../domain/permissions";
 
 export type MutationName = Exclude<keyof Mutation, "__typename">;
@@ -14,7 +18,15 @@ export interface MutationPolicy {
  * its entry here, in the same change as the resolver. A resolver without an entry fails the
  * guard test, so a mutation cannot ship unguarded or unaudited.
  */
-export const MUTATION_POLICY: Readonly<Partial<Record<MutationName, MutationPolicy>>> = {};
+export const MUTATION_POLICY: Readonly<Partial<Record<MutationName, MutationPolicy>>> = {
+  createMember: { permission: "member.create", auditAction: MEMBER_CREATED },
+  // The profile edit needs member.update. A status change needs member.pause, or member.cancel
+  // for a cancel, and the use cases check those themselves before they write.
+  updateMember: { permission: "member.update", auditAction: MEMBER_UPDATED },
+  recordPayment: { permission: "payment.record", auditAction: PAYMENT_RECORDED },
+  voidPayment: { permission: "payment.void", auditAction: PAYMENT_VOIDED },
+  voidInvoice: { permission: "invoice.void", auditAction: INVOICE_VOIDED },
+};
 
 /**
  * Mutations that belong to the person and not to a gym role: they sign in, sign out and pick a
@@ -30,11 +42,6 @@ export const IDENTITY_MUTATIONS: readonly MutationName[] = ["signIn", "signOut",
  */
 export const PENDING_MUTATIONS: readonly MutationName[] = [
   "recordScan",
-  "createMember",
-  "updateMember",
-  "recordPayment",
-  "voidPayment",
-  "voidInvoice",
   "addDiscount",
   "endDiscount",
   "updatePlan",

@@ -39,9 +39,22 @@ describe("mappers", () => {
         ],
       }),
     ).toEqual([
-      { code: "INVALID_INPUT", field: "input.email", message: "bad" },
+      { code: "INVALID_INPUT", field: "email", message: "bad" },
       { code: "INVALID_INPUT", field: null, message: "worse" },
     ]);
+  });
+
+  it("renames a domain field to the field of the GraphQL input", () => {
+    expect(
+      toUserErrors(
+        {
+          kind: "validation",
+          message: "Invalid member",
+          issues: [{ path: ["fullName"], message: "Required" }],
+        },
+        { fullName: "name" },
+      ),
+    ).toEqual([{ code: "INVALID_INPUT", field: "name", message: "Required" }]);
   });
 
   it("maps a validation error without issues to one user error", () => {
