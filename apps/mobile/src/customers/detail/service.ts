@@ -86,6 +86,13 @@ export type ActionResult =
   | { readonly status: "forbidden" }
   | { readonly status: "failed"; readonly message: string };
 
+export interface NewDiscount {
+  /** Integer minor units, more than zero. */
+  readonly amount: number;
+  readonly isRecurring: boolean;
+  readonly reason: string;
+}
+
 export interface DetailService {
   header(memberId: string): Promise<HeaderResult>;
   invoices(memberId: string): PageLoader<InvoiceRow>;
@@ -97,6 +104,10 @@ export interface DetailService {
   changeStatus(memberId: string, status: MemberStatus, reason: string): Promise<ActionResult>;
   voidPayment(id: string, reason: string): Promise<ActionResult>;
   voidInvoice(id: string, reason: string): Promise<ActionResult>;
+  /** A manual discount for one member. It reaches invoices generated after it, never earlier ones. */
+  addDiscount(memberId: string, discount: NewDiscount): Promise<ActionResult>;
+  /** Ends a monthly discount. The reason is required. */
+  endDiscount(id: string, reason: string): Promise<ActionResult>;
 }
 
 export const PAGE_SIZE = 20;
@@ -220,6 +231,26 @@ const voidPaymentMutation = (id: string, reason: string) =>
 const voidInvoiceMutation = (id: string, reason: string) =>
   mutation("VoidInvoice", {
     voidInvoice: { args: { id, reason }, select: { invoice: { id: true }, errors: problems } },
+  });
+
+const addDiscountMutation = (memberId: string, discount: NewDiscount) =>
+  mutation("AddDiscount", {
+    addDiscount: {
+      args: {
+        input: {
+          memberId,
+          amount: discount.amount,
+          isRecurring: discount.isRecurring,
+          reason: discount.reason,
+        },
+      },
+      select: { discount: { id: true }, errors: problems },
+    },
+  });
+
+const endDiscountMutation = (id: string, reason: string) =>
+  mutation("EndDiscount", {
+    endDiscount: { args: { id, reason }, select: { discount: { id: true }, errors: problems } },
   });
 
 interface Reported {
@@ -361,6 +392,16 @@ export function createDetailService(deps: {
     async voidInvoice(id, reason) {
       const outcome = await client.execute(voidInvoiceMutation(id, reason));
       return toAction(outcome, outcome.status === "data" ? outcome.data.voidInvoice.errors : null);
+    },
+
+    async addDiscount(memberId, discount) {
+      const outcome = await client.execute(addDiscountMutation(memberId, discount));
+      return toAction(outcome, outcome.status === "data" ? outcome.data.addDiscount.errors : null);
+    },
+
+    async endDiscount(id, reason) {
+      const outcome = await client.execute(endDiscountMutation(id, reason));
+      return toAction(outcome, outcome.status === "data" ? outcome.data.endDiscount.errors : null);
     },
   };
 }

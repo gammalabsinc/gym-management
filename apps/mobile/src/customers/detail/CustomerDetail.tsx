@@ -1,18 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "../../ui/Button";
 import { ErrorBlock, Skeleton } from "../../ui/blocks";
 import { CustomerDetailScreen, type TabName } from "./CustomerDetailScreen";
 import { useDetailService } from "./context";
+import { DISCOUNT_NOTE, DiscountSheet } from "./DiscountSheet";
 import { PagedTab } from "./PagedTab";
 import { ReasonSheet } from "./ReasonSheet";
 import { DiscountCard, HistoryCard, InvoiceCard, PaymentCard, VisitCard } from "./rows";
-import type { ActionResult, DetailHeader, HeaderResult, MemberStatus } from "./service";
+import type {
+  ActionResult,
+  DetailHeader,
+  HeaderResult,
+  MemberStatus,
+  NewDiscount,
+} from "./service";
 
 export const FORBIDDEN_MESSAGE = "You do not have permission to do that.";
 
 type Sheet =
   | { readonly kind: "status"; readonly to: MemberStatus }
   | { readonly kind: "voidPayment"; readonly id: string }
-  | { readonly kind: "voidInvoice"; readonly id: string };
+  | { readonly kind: "voidInvoice"; readonly id: string }
+  | { readonly kind: "endDiscount"; readonly id: string }
+  | { readonly kind: "addDiscount" };
 
 const SHEETS = {
   PAUSED: {
@@ -37,8 +47,20 @@ const SHEETS = {
   },
 } as const;
 
-function sheetText(sheet: Sheet) {
+/** The sheets that ask for a reason and nothing else. Add discount has its own sheet. */
+type ReasonKind = Exclude<Sheet, { readonly kind: "addDiscount" }>;
+
+function sheetText(sheet: ReasonKind) {
   if (sheet.kind === "status") return SHEETS[sheet.to];
+  if (sheet.kind === "endDiscount") {
+    return {
+      title: "End this discount?",
+      description:
+        "The discount stops applying to invoices generated after today. Invoices already generated do not change.",
+      confirm: "End discount",
+      danger: false,
+    };
+  }
   if (sheet.kind === "voidPayment") {
     return {
       title: "Void this payment?",
@@ -81,6 +103,7 @@ export function CustomerDetail(props: {
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const mounted = useRef(true);
   const generation = useRef(0);
 
@@ -111,9 +134,10 @@ export function CustomerDetail(props: {
     [service, id],
   );
 
-  async function run(call: () => Promise<ActionResult>): Promise<void> {
+  async function run(call: () => Promise<ActionResult>, doneNotice?: string): Promise<void> {
     setBusy(true);
     setSheetError(null);
+    setNotice(null);
     const result = await call();
     if (!mounted.current) return;
     setBusy(false);
@@ -121,6 +145,7 @@ export function CustomerDetail(props: {
       case "done":
         setSheet(null);
         setBanner(null);
+        setNotice(doneNotice ?? null);
         setReloads((count) => count + 1);
         await loadHeader();
         return;
@@ -140,9 +165,14 @@ export function CustomerDetail(props: {
     }
   }
 
+  function addDiscount(discount: NewDiscount): void {
+    void run(() => service.addDiscount(id, discount), DISCOUNT_NOTE);
+  }
+
   function confirm(reason: string): void {
-    if (sheet === null) return;
-    if (sheet.kind === "status") void run(() => service.changeStatus(id, sheet.to, reason));
+    if (sheet === null || sheet.kind === "addDiscount") return;
+    if (sheet.kind === "endDiscount") void run(() => service.endDiscount(sheet.id, reason));
+    else if (sheet.kind === "status") void run(() => service.changeStatus(id, sheet.to, reason));
     else if (sheet.kind === "voidPayment") void run(() => service.voidPayment(sheet.id, reason));
     else void run(() => service.voidInvoice(sheet.id, reason));
   }
@@ -164,6 +194,7 @@ export function CustomerDetail(props: {
         header={info}
         tab={tab}
         banner={banner}
+        notice={notice}
         actionsOpen={actionsOpen}
         onTab={setTab}
         onBack={props.onBack}
@@ -220,6 +251,9 @@ export function CustomerDetail(props: {
             render={(row) => <VisitCard row={row} timezone={info.timezone} />}
           />
         ) : null}
+        {tab === "Discounts" && owner ? (
+          <Button label="Add discount" onPress={open({ kind: "addDiscount" })} />
+        ) : null}
         {tab === "Discounts" ? (
           <PagedTab
             key={`discounts-${reloads}`}
@@ -227,7 +261,17 @@ export function CustomerDetail(props: {
             emptyTitle="No discounts"
             emptyHint="Referral and manual discounts appear here."
             keyOf={(row) => row.id}
-            render={(row) => <DiscountCard row={row} currency={info.currency} />}
+            render={(row) => (
+              <DiscountCard
+                row={row}
+                currency={info.currency}
+                onEnd={
+                  owner && row.kind === "MANUAL" && row.isRecurring && row.isActive
+                    ? open({ kind: "endDiscount", id: row.id })
+                    : null
+                }
+              />
+            )}
           />
         ) : null}
         {tab === "History" ? (
@@ -241,7 +285,16 @@ export function CustomerDetail(props: {
           />
         ) : null}
       </CustomerDetailScreen>
-      {sheet === null ? null : (
+      {sheet?.kind === "addDiscount" ? (
+        <DiscountSheet
+          currency={info.currency}
+          busy={busy}
+          error={sheetError}
+          onSave={addDiscount}
+          onCancel={() => setSheet(null)}
+        />
+      ) : null}
+      {sheet === null || sheet.kind === "addDiscount" ? null : (
         <ReasonSheet
           title={sheetText(sheet).title}
           description={sheetText(sheet).description}

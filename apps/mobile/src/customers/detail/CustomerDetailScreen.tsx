@@ -36,6 +36,7 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, color: COLORS.textMuted },
   tabTextOn: { fontWeight: "700", color: COLORS.text },
   banner: { fontSize: 14, color: COLORS.danger },
+  notice: { fontSize: 14, color: COLORS.textMuted },
 });
 
 /** A3: the customer header, its five tabs and the more actions. The open tab is `children`. */
@@ -43,6 +44,8 @@ export function CustomerDetailScreen(props: {
   readonly header: DetailHeader;
   readonly tab: TabName;
   readonly banner: string | null;
+  /** Good news that needs saying, such as when a new discount starts to count. */
+  readonly notice: string | null;
   readonly actionsOpen: boolean;
   readonly onTab: (tab: TabName) => void;
   readonly onBack: () => void;
@@ -83,6 +86,11 @@ export function CustomerDetailScreen(props: {
       {props.banner === null ? null : (
         <Text accessibilityRole="alert" style={styles.banner}>
           {props.banner}
+        </Text>
+      )}
+      {props.notice === null ? null : (
+        <Text accessibilityRole="summary" style={styles.notice}>
+          {props.notice}
         </Text>
       )}
       <View style={styles.row}>

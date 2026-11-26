@@ -177,6 +177,43 @@ describe("actions", () => {
     expect(sent(invoice.execute)).toContain('"i1"');
   });
 
+  it("sends the member, the amount in minor units, the kind and the reason for a discount", async () => {
+    const s = svc(done("addDiscount"));
+    expect(
+      await s.service.addDiscount("m1", { amount: 1250, isRecurring: true, reason: "Goodwill" }),
+    ).toEqual({ status: "done" });
+    const request = sent(s.execute);
+    expect(request).toContain('"m1"');
+    expect(request).toContain("1250");
+    expect(request).toContain("true");
+    expect(request).toContain('"Goodwill"');
+  });
+
+  it("sends the id and the reason when ending a discount", async () => {
+    const s = svc(done("endDiscount"));
+    expect(await s.service.endDiscount("d1", "Left")).toEqual({ status: "done" });
+    expect(sent(s.execute)).toContain('"d1"');
+    expect(sent(s.execute)).toContain('"Left"');
+  });
+
+  it("maps the answers of both discount calls like the other actions", async () => {
+    const add = (outcome: unknown) =>
+      svc(outcome).service.addDiscount("m1", { amount: 1, isRecurring: false, reason: "r" });
+    expect(await add(forbidden)).toEqual({ status: "forbidden" });
+    expect(await add(refused("addDiscount", "INVALID_INPUT", "Bad"))).toEqual({
+      status: "invalid",
+      message: "Bad",
+    });
+    expect(await add(network)).toEqual({ status: "failed", message: "Offline" });
+    expect(await add(empty)).toMatchObject({ status: "failed" });
+    const end = (outcome: unknown) => svc(outcome).service.endDiscount("d1", "r");
+    expect(await end(refused("endDiscount", "CONFLICT", "Ended"))).toEqual({
+      status: "refused",
+      message: "Ended",
+    });
+    expect(await end(error)).toEqual({ status: "failed", message: "Nope" });
+  });
+
   it("separates forbidden, invalid, refused and failed", async () => {
     const change = (outcome: unknown) => svc(outcome).service.voidPayment("p1", "r");
     expect(await change(forbidden)).toEqual({ status: "forbidden" });
