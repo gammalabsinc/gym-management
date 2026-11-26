@@ -18,6 +18,9 @@ vi.mock("../settings/Settings", () => ({
   Settings: (props: { viewer: string }) =>
     createElement("div", null, `Settings for ${props.viewer}`),
 }));
+vi.mock("../staff/Staff", () => ({
+  Staff: (props: { viewer: string }) => createElement("div", null, `Staff for ${props.viewer}`),
+}));
 vi.mock("../screens/GymPicker", () => ({
   GymPicker: () => createElement("div", null, "Pick a gym"),
 }));
@@ -81,6 +84,7 @@ describe("RootNavigator", () => {
     expect(screen.getByTestId("tab-Settings")).toBeTruthy();
     expect(screen.getByTestId("tab-Staff")).toBeTruthy();
     expect(screen.getByText("Settings for owner")).toBeTruthy();
+    expect(screen.getByText("Staff for owner")).toBeTruthy();
     cleanup();
     render(createElement(RootNavigator, { session: { status: "signedIn", role: "staff" } }));
     expect(screen.queryByTestId("tab-Settings")).toBeNull();
