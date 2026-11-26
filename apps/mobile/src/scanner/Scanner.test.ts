@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CameraPermission, CameraPort } from "./camera";
 import { ScannerProvider, useScannerDeps } from "./context";
 import { Scanner } from "./Scanner";
-import type { FirstCheckIn, ScanOutcome } from "./scan";
+import type { FirstCheckIn, ScanOutcome, SearchResult } from "./scan";
 
 const focus = vi.hoisted(() => ({ focused: true }));
 vi.mock("@react-navigation/native", () => ({ useIsFocused: () => focus.focused }));
@@ -44,7 +44,11 @@ function setup(
     Scanner: FakeScanner,
     openSettings,
   };
-  const service = { record: vi.fn(record), firstCheckIn: vi.fn(firstCheckIn) };
+  const service = {
+    record: vi.fn(record),
+    firstCheckIn: vi.fn(firstCheckIn),
+    search: vi.fn(async (): Promise<SearchResult> => ({ status: "results", rows: [] })),
+  };
   const view = render(
     createElement(ScannerProvider, { deps: { service, camera } }, createElement(Scanner)),
   );
@@ -76,7 +80,7 @@ describe("Scanner", () => {
       Scanner: NullScanner,
       openSettings: async () => undefined,
     };
-    const service = { record: vi.fn(), firstCheckIn: vi.fn() };
+    const service = { record: vi.fn(), firstCheckIn: vi.fn(), search: vi.fn() };
     const tree = () =>
       createElement(ScannerProvider, { deps: { service, camera } }, createElement(Scanner));
     const view = render(tree());
@@ -216,6 +220,92 @@ describe("Scanner", () => {
     expect(screen.getByText("Check in by search")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Back to scanner"));
     expect(screen.getByTestId("camera")).toBeTruthy();
+  });
+
+  it("checks a member in from the search and shows the same result card as a scan", async () => {
+    const s = setup("granted", async () => recorded);
+    s.service.search.mockResolvedValue({
+      status: "results",
+      rows: [
+        {
+          memberId: "m1",
+          barcode: "ABC123",
+          name: "Sam Lee",
+          memberNo: "0042",
+          status: "ACTIVE",
+          standing: "PAID",
+        },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("Search"));
+    fireEvent.change(screen.getByLabelText("Search members"), { target: { value: "sam" } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    fireEvent.click(await screen.findByText("Check in Sam Lee"));
+    await act(async () => undefined);
+    expect(s.service.record).toHaveBeenCalledWith("ABC123", "MANUAL");
+    expect(screen.getByText("Welcome")).toBeTruthy();
+  });
+
+  it("says so when there is no connection during a check in from the search", async () => {
+    const s = setup("granted", async () => ({ status: "offline" }));
+    s.service.search.mockResolvedValue({
+      status: "results",
+      rows: [
+        {
+          memberId: "m1",
+          barcode: "ABC123",
+          name: "Sam Lee",
+          memberNo: "0042",
+          status: "ACTIVE",
+          standing: "PAID",
+        },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("Search"));
+    fireEvent.change(screen.getByLabelText("Search members"), { target: { value: "sam" } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    fireEvent.click(await screen.findByText("Check in Sam Lee"));
+    await act(async () => undefined);
+    expect(screen.getByText("No connection")).toBeTruthy();
+  });
+
+  it("ignores a check in from the search that finishes after unmount", async () => {
+    let finish!: (o: ScanOutcome) => void;
+    const s = setup(
+      "granted",
+      () =>
+        new Promise<ScanOutcome>((r) => {
+          finish = r;
+        }),
+    );
+    s.service.search.mockResolvedValue({
+      status: "results",
+      rows: [
+        {
+          memberId: "m1",
+          barcode: "ABC123",
+          name: "Sam Lee",
+          memberNo: "0042",
+          status: "ACTIVE",
+          standing: "PAID",
+        },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("Search"));
+    fireEvent.change(screen.getByLabelText("Search members"), { target: { value: "sam" } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    fireEvent.click(await screen.findByText("Check in Sam Lee"));
+    s.view.unmount();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await act(async () => finish(recorded));
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it("ignores an answer that arrives after unmount", async () => {
