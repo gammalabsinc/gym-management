@@ -15,6 +15,7 @@ import type { CameraPort } from "./scanner/camera";
 import type { ScannerDeps } from "./scanner/context";
 import { createScanService } from "./scanner/scan";
 import { createSettingsService, type SettingsService } from "./settings/service";
+import { createStaffService, type StaffService } from "./staff/service";
 
 /** The native pieces, passed in from the entry point so tests need no native module. */
 export interface Platform {
@@ -36,6 +37,7 @@ export interface Services {
   readonly scanner: ScannerDeps;
   readonly customers: CustomersService;
   readonly settings: SettingsService;
+  readonly staff: StaffService;
 }
 
 export function newRequestId(): string {
@@ -88,5 +90,6 @@ export function composeServices(
     scanner: { service: createScanService({ client }), camera: platform.camera },
     customers: createCustomersService({ client }),
     settings: createSettingsService({ client }),
+    staff: createStaffService({ client }),
   };
 }

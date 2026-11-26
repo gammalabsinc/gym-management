@@ -7,6 +7,7 @@ import { Scanner } from "../scanner/Scanner";
 import { GymPicker } from "../screens/GymPicker";
 import { SignIn } from "../screens/SignIn";
 import { Settings } from "../settings/Settings";
+import { Staff } from "../staff/Staff";
 import { TabSet } from "./TabSet";
 import { adminTabsFor, CUSTOMER_TABS } from "./tabs";
 
@@ -15,8 +16,13 @@ const STAFF_SCREENS = {
   Scan: () => <Scanner />,
   Customers: () => <Customers />,
   Settings: () => <Settings viewer="staff" />,
+  Staff: () => <Staff viewer="staff" />,
 };
-const OWNER_SCREENS = { ...STAFF_SCREENS, Settings: () => <Settings viewer="owner" /> };
+const OWNER_SCREENS = {
+  ...STAFF_SCREENS,
+  Settings: () => <Settings viewer="owner" />,
+  Staff: () => <Staff viewer="owner" />,
+};
 
 function Screen(props: { readonly destination: Destination; readonly session: Session }) {
   switch (props.destination) {
