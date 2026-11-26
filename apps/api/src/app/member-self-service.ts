@@ -17,7 +17,13 @@ import type { MemberView } from "../domain/member-view";
 import { ok, type Result } from "../domain/result";
 import type { Tenant } from "../domain/tenant";
 import { memberQueryContext } from "./member-queries";
-import type { Clock, MemberSelfServiceUnit, MonthVisits, WithTenantTx } from "./ports";
+import type {
+  AttendanceRecord,
+  Clock,
+  MemberSelfServiceUnit,
+  MonthVisits,
+  WithTenantTx,
+} from "./ports";
 import { type PermissionContext, requirePermission } from "./require-permission";
 
 export interface MemberSelfServiceDeps {
@@ -120,6 +126,49 @@ export function makeGetOwnMember(deps: MemberSelfServiceDeps) {
       return member === null ? notFound(MEMBER_NOT_FOUND) : ok(member);
     }),
   );
+}
+
+export interface OwnVisitsInput {
+  readonly memberId: string;
+  readonly limit?: number | null | undefined;
+  readonly cursor?: string | null | undefined;
+}
+
+/**
+ * The caller's own check ins, newest first, repeat scans left out, in the shape staff read them.
+ * The id must be the member the session's user owns, and any other id is the same not found as an
+ * unknown one.
+ */
+export function makeGetOwnVisits(deps: MemberSelfServiceDeps) {
+  return requirePermission<
+    OwnVisitsInput,
+    MemberSelfCaller,
+    { readonly items: readonly AttendanceRecord[]; readonly nextCursor: string | null },
+    ValidationError | NotFoundError
+  >(PERMISSION, async (input, ctx) => {
+    const parsed = parseAttendancePage(input);
+    if (!parsed.ok) return parsed;
+    const { limit, after } = parsed.value;
+    return deps.withUnit(ctx.tenantId, async (unit) => {
+      const memberId = await ownMemberId(unit, ctx);
+      if (!memberId.ok) return memberId;
+      if (input.memberId !== memberId.value) return notFound(MEMBER_NOT_FOUND);
+      const rows = await unit.attendance.history(
+        memberId.value,
+        { limit: limit + 1, after },
+        false,
+      );
+      const items = rows.slice(0, limit);
+      const last = items.at(-1);
+      const hasMore = rows.length > limit && last !== undefined;
+      return ok({
+        items,
+        nextCursor: hasMore
+          ? encodeAttendanceCursor({ scannedAt: last.scannedAt, id: last.id })
+          : null,
+      });
+    });
+  });
 }
 
 function monthsOf(visits: MonthVisits): Pick<MyAttendance, "visitsThisMonth" | "visitsLastMonth"> {

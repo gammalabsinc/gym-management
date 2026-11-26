@@ -226,3 +226,193 @@ describe("the member queries", () => {
     expect(reply.errors?.[0]?.extensions?.code).toBe("BAD_USER_INPUT");
   });
 });
+
+interface Ledger {
+  invoices: { items: { lines: { lineType: string }[] }[] };
+  payments: { items: unknown[] };
+  discounts: unknown[];
+  membershipPeriods: unknown[];
+  visits: { items: { isDuplicate: boolean }[] };
+}
+
+describe("the ledger queries", () => {
+  const LEDGER = `query($id: ID!) {
+    invoices(memberId: $id, page: { limit: 10 }) { items { id memberId total amountDue isPaid isVoid dueDate lines { lineType amount } } nextCursor }
+    payments(memberId: $id) { items { id amount method paidOn isVoid } nextCursor }
+    discounts(memberId: $id) { id kind isActive isConsumed }
+    membershipPeriods(memberId: $id) { id status validFrom validTo }
+    visits(memberId: $id) { items { id isDuplicate source localDate } nextCursor }
+  }`;
+
+  async function memberId(subdomain: string, name: string): Promise<string> {
+    const staff = await sessionFor(`staff@${subdomain}.test`, subdomain);
+    const found = itemsOf(await post(LIST, { search: name }, staff)).find((m) => m.name === name);
+    if (found === undefined) throw new Error(`no member ${name}`);
+    return found.id;
+  }
+
+  async function addVisits(subdomain: string, id: string): Promise<void> {
+    const tenantId = gyms.get(subdomain);
+    for (const [at, duplicate] of [
+      ["2026-11-02T14:00:00Z", false],
+      ["2026-11-02T14:01:00Z", true],
+      ["2026-11-03T14:00:00Z", false],
+    ] as const) {
+      await db.admin.query(
+        `INSERT INTO attendance (tenant_id, member_id, scanned_at, local_date, is_duplicate, status_at_scan, source)
+         VALUES ($1, $2, $3, ($3::timestamptz AT TIME ZONE 'UTC')::date, $4, 'paid', 'staff_app')`,
+        [tenantId, id, at, duplicate],
+      );
+    }
+  }
+
+  it("gives staff the invoices, payments and history of a paid member", async () => {
+    const id = await memberId("ironworks", "Paula Paid");
+    await addVisits("ironworks", id);
+    const staff = await sessionFor("staff@ironworks.test", "ironworks");
+    const reply = await post(LEDGER, { id }, staff);
+    expect(reply.errors).toBeUndefined();
+    const data = reply.data as unknown as Ledger;
+    expect(data.invoices.items).toHaveLength(1);
+    expect(data.invoices.items[0]).toMatchObject({
+      memberId: id,
+      total: 9000,
+      amountDue: 0,
+      isPaid: true,
+      isVoid: false,
+    });
+    expect(data.invoices.items[0]?.lines.map((l) => l.lineType)).toEqual(
+      expect.arrayContaining(["ADMISSION", "MEMBERSHIP"]),
+    );
+    expect(data.payments.items).toHaveLength(1);
+    expect(data.payments.items[0]).toMatchObject({ amount: 9000, isVoid: false });
+    expect(data.membershipPeriods).toMatchObject([{ status: "ACTIVE", validTo: null }]);
+    expect(data.visits.items).toHaveLength(3);
+    expect(data.visits.items.filter((v) => v.isDuplicate)).toHaveLength(1);
+    expect(data.discounts).toEqual([]);
+  });
+
+  it("shows a member their own ledger and visits without repeat scans", async () => {
+    const id = await memberId("ironworks", "Paula Paid");
+    const token = await sessionFor("paula@ironworks.test", "ironworks");
+    const own = await post(
+      `query($id: ID!) {
+        invoices(memberId: $id) { items { id } }
+        payments(memberId: $id) { items { id } }
+        visits(memberId: $id) { items { isDuplicate } nextCursor }
+        discounts(memberId: $id) { id }
+      }`,
+      { id },
+      token,
+    );
+    expect(own.errors).toBeUndefined();
+    const data = own.data as unknown as Ledger;
+    expect(data.invoices.items).toHaveLength(1);
+    expect(data.visits.items).toEqual([{ isDuplicate: false }, { isDuplicate: false }]);
+  });
+
+  it("keeps a member out of another member's ledger and out of the history tab", async () => {
+    const other = await memberId("ironworks", "Pedro Paid");
+    const token = await sessionFor("paula@ironworks.test", "ironworks");
+    for (const field of [
+      "invoices(memberId: $id) { items { id } }",
+      "payments(memberId: $id) { items { id } }",
+      "visits(memberId: $id) { items { id } }",
+      "discounts(memberId: $id) { id }",
+    ]) {
+      const reply = await post(`query($id: ID!) { ${field} }`, { id: other }, token);
+      expect(reply.errors?.[0]?.extensions?.code).toBe("NOT_FOUND");
+    }
+    const history = await post(
+      "query($id: ID!) { membershipPeriods(memberId: $id) { id } }",
+      { id: await memberId("ironworks", "Paula Paid") },
+      token,
+    );
+    expect(history.errors?.[0]?.extensions?.code).toBe("FORBIDDEN");
+  });
+
+  it("does not show one gym's ledger to the staff of another gym", async () => {
+    const id = await memberId("ironworks", "Paula Paid");
+    const pulse = await sessionFor("staff@pulsefit.test", "pulsefit");
+    for (const field of [
+      "invoices(memberId: $id) { items { id } }",
+      "payments(memberId: $id) { items { id } }",
+      "visits(memberId: $id) { items { id } }",
+      "discounts(memberId: $id) { id }",
+      "membershipPeriods(memberId: $id) { id }",
+    ]) {
+      const reply = await post(`query($id: ID!) { ${field} }`, { id }, pulse);
+      expect(reply.errors?.[0]?.extensions?.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("shows an overdue member the invoice they owe", async () => {
+    const id = await memberId("ironworks", "Olga Overdue");
+    const owner = await sessionFor("owner@ironworks.test", "ironworks");
+    const reply = await post(
+      "query($id: ID!) { invoices(memberId: $id) { items { isPaid amountDue } } payments(memberId: $id) { items { id } } }",
+      { id },
+      owner,
+    );
+    const data = reply.data as unknown as Ledger;
+    expect(data.invoices.items).toEqual([{ isPaid: false, amountDue: 9000 }]);
+    expect(data.payments.items).toEqual([]);
+  });
+
+  it("refuses a field the read side does not hold, instead of inventing it", async () => {
+    const id = await memberId("ironworks", "Paula Paid");
+    const staff = await sessionFor("staff@ironworks.test", "ironworks");
+    const reply = await post(
+      "query($id: ID!) { payments(memberId: $id) { items { recordedBy } } }",
+      { id },
+      staff,
+    );
+    expect(reply.errors).toBeDefined();
+  });
+});
+
+describe("previewPayment", () => {
+  const PREVIEW = `query($id: ID!, $amount: Int!) {
+    previewPayment(memberId: $id, amount: $amount) { allocations { invoiceId amount } paidThroughAfter creditAfter }
+  }`;
+
+  it("shows what a payment would settle and writes nothing", async () => {
+    const staff = await sessionFor("staff@ironworks.test", "ironworks");
+    const list = itemsOf(await post(LIST, { search: "Olga" }, staff));
+    const id = list[0]?.id;
+    const reply = await post(PREVIEW, { id, amount: 9000 }, staff);
+    expect(reply.errors).toBeUndefined();
+    const preview = reply.data?.previewPayment as {
+      allocations: { amount: number }[];
+      creditAfter: number;
+    };
+    expect(preview.allocations[0]?.amount).toBe(9000);
+    expect(preview.creditAfter).toBe(0);
+    const { rows } = await db.admin.query(
+      "SELECT count(*)::int AS n FROM payments WHERE member_id = $1",
+      [id],
+    );
+    expect((rows[0] as { n: number }).n).toBe(0);
+  });
+
+  it("counts a cycle that is not invoiced yet, with an upcoming id", async () => {
+    const staff = await sessionFor("staff@ironworks.test", "ironworks");
+    const id = itemsOf(await post(LIST, { search: "Paula" }, staff))[0]?.id;
+    const reply = await post(PREVIEW, { id, amount: 4000 }, staff);
+    const preview = reply.data?.previewPayment as { allocations: { invoiceId: string }[] };
+    expect(preview.allocations[0]?.invoiceId).toMatch(/^upcoming:\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("is staff only, and does not cross gyms", async () => {
+    const staff = await sessionFor("staff@ironworks.test", "ironworks");
+    const id = itemsOf(await post(LIST, { search: "Olga" }, staff))[0]?.id;
+    const member = await sessionFor("paula@ironworks.test", "ironworks");
+    expect((await post(PREVIEW, { id, amount: 100 }, member)).errors?.[0]?.extensions?.code).toBe(
+      "FORBIDDEN",
+    );
+    const pulse = await sessionFor("staff@pulsefit.test", "pulsefit");
+    expect((await post(PREVIEW, { id, amount: 100 }, pulse)).errors?.[0]?.extensions?.code).toBe(
+      "NOT_FOUND",
+    );
+  });
+});
