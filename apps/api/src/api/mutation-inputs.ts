@@ -122,4 +122,5 @@ export const mutationArgs = {
     })
     .strict(),
   setRole: z.object({ userId: idSchema, role: roleSchema, isOn: z.boolean() }).strict(),
+  removeAccess: z.object({ userId: idSchema }).strict(),
 } as const;

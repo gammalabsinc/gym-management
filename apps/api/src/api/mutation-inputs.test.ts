@@ -10,6 +10,7 @@ import type {
   MutationInviteUserArgs,
   MutationRecordPaymentArgs,
   MutationRecordScanArgs,
+  MutationRemoveAccessArgs,
   MutationSelectGymArgs,
   MutationSetRoleArgs,
   MutationSignInArgs,
@@ -49,7 +50,7 @@ describe("schemas stay in step with schema.graphql (checked by tsc)", () => {
     expectTypeOf<keyof typeof mutationArgs>().toEqualTypeOf<
       Exclude<keyof Mutation, "__typename">
     >();
-    expect(Object.keys(mutationArgs)).toHaveLength(15);
+    expect(Object.keys(mutationArgs)).toHaveLength(16);
   });
 
   it("has the same fields as every input object", () => {
@@ -100,6 +101,9 @@ describe("schemas stay in step with schema.graphql (checked by tsc)", () => {
       keyof MutationInviteUserArgs
     >();
     expectTypeOf<Keys<typeof mutationArgs.setRole>>().toEqualTypeOf<keyof MutationSetRoleArgs>();
+    expectTypeOf<Keys<typeof mutationArgs.removeAccess>>().toEqualTypeOf<
+      keyof MutationRemoveAccessArgs
+    >();
   });
 
   it("lists exactly the values of each closed set", () => {
@@ -309,6 +313,9 @@ describe("mutationArgs", () => {
     expect(ok(mutationArgs.inviteUser, { email: "a@b.co", role: "MEMBER" })).toBe(false);
     expect(ok(mutationArgs.setRole, { userId: "u1", role: "MEMBER", isOn: true })).toBe(true);
     expect(ok(mutationArgs.setRole, { userId: "u1", role: "ROOT", isOn: true })).toBe(false);
+    expect(ok(mutationArgs.removeAccess, { userId: "u1" })).toBe(true);
+    expect(ok(mutationArgs.removeAccess, { userId: "" })).toBe(false);
+    expect(ok(mutationArgs.removeAccess, { userId: "u1", extra: 1 })).toBe(false);
     expect(ok(mutationArgs.selectGym, { tenantId: "t1" })).toBe(true);
     expect(ok(mutationArgs.selectGym, { tenantId: "" })).toBe(false);
   });

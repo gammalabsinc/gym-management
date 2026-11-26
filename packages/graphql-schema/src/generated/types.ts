@@ -229,6 +229,7 @@ export type Mutation = {
   inviteUser: StaffPayload;
   recordPayment: PaymentPayload;
   recordScan: ScanPayload;
+  removeAccess: StaffPayload;
   selectGym: SelectGymPayload;
   setRole: StaffPayload;
   signIn: SignInPayload;
@@ -272,6 +273,11 @@ export type MutationRecordPaymentArgs = {
 export type MutationRecordScanArgs = {
   barcode: Scalars['String']['input'];
   source?: InputMaybe<ScanSource>;
+};
+
+
+export type MutationRemoveAccessArgs = {
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -533,6 +539,7 @@ export type StaffPayload = {
 export type StaffUser = {
   __typename?: 'StaffUser';
   email: Scalars['String']['output'];
+  hasSignedIn: Scalars['Boolean']['output'];
   name?: Maybe<Scalars['String']['output']>;
   roles: Array<Role>;
   userId: Scalars['ID']['output'];
@@ -945,6 +952,7 @@ export type MutationResolvers<ContextType = any, ParentType extends ResolversPar
   inviteUser?: Resolver<ResolversTypes['StaffPayload'], ParentType, ContextType, RequireFields<MutationInviteUserArgs, 'email' | 'role'>>;
   recordPayment?: Resolver<ResolversTypes['PaymentPayload'], ParentType, ContextType, RequireFields<MutationRecordPaymentArgs, 'input'>>;
   recordScan?: Resolver<ResolversTypes['ScanPayload'], ParentType, ContextType, RequireFields<MutationRecordScanArgs, 'barcode' | 'source'>>;
+  removeAccess?: Resolver<ResolversTypes['StaffPayload'], ParentType, ContextType, RequireFields<MutationRemoveAccessArgs, 'userId'>>;
   selectGym?: Resolver<ResolversTypes['SelectGymPayload'], ParentType, ContextType, RequireFields<MutationSelectGymArgs, 'tenantId'>>;
   setRole?: Resolver<ResolversTypes['StaffPayload'], ParentType, ContextType, RequireFields<MutationSetRoleArgs, 'isOn' | 'role' | 'userId'>>;
   signIn?: Resolver<ResolversTypes['SignInPayload'], ParentType, ContextType, RequireFields<MutationSignInArgs, 'idToken'>>;
@@ -1051,6 +1059,7 @@ export type StaffPayloadResolvers<ContextType = any, ParentType extends Resolver
 
 export type StaffUserResolvers<ContextType = any, ParentType extends ResolversParentTypes['StaffUser'] = ResolversParentTypes['StaffUser']> = ResolversObject<{
   email?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  hasSignedIn?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   name?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   roles?: Resolver<Array<ResolversTypes['Role']>, ParentType, ContextType>;
   userId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;

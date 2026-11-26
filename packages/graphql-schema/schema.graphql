@@ -112,6 +112,7 @@ type StaffUser {
   name: String
   email: String!
   roles: [Role!]!
+  hasSignedIn: Boolean! # false until the person first signs in, the app shows an Invited chip
 }
 
 type Plan {
@@ -349,6 +350,7 @@ type Mutation {
 
   inviteUser(email: String!, name: String, role: Role!): StaffPayload! # roles.write
   setRole(userId: ID!, role: Role!, isOn: Boolean!): StaffPayload! # roles.write
+  removeAccess(userId: ID!): StaffPayload! # roles.write, drops every role in one step and revokes the sessions for this gym
 }
 
 type SignInPayload {
