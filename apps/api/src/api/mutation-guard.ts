@@ -1,7 +1,10 @@
 import type { Mutation } from "@gym/graphql-schema";
 import { MEMBER_CREATED } from "../app/create-member";
 import { MEMBER_UPDATED } from "../app/edit-member";
+import { DISCOUNT_ADDED, DISCOUNT_ENDED } from "../app/manual-discounts";
 import { PAYMENT_RECORDED } from "../app/record-payment";
+import { ROLE_ASSIGNED, ROLE_REVOKED } from "../app/role-management";
+import { PLAN_UPDATED, SETTINGS_UPDATED } from "../app/tenant-settings";
 import { INVOICE_VOIDED, PAYMENT_VOIDED } from "../app/voids";
 import { hasPermission, type Permission, ROLES } from "../domain/permissions";
 
@@ -11,6 +14,11 @@ export type MutationName = Exclude<keyof Mutation, "__typename">;
 export interface MutationPolicy {
   readonly permission: Permission;
   readonly auditAction: string;
+  /**
+   * Set only when the change is its own record and writes no audit event, with the reason. A
+   * check in is the attendance row itself, so a second record of it would say the same thing.
+   */
+  readonly auditExemption?: string;
 }
 
 /**
@@ -26,6 +34,18 @@ export const MUTATION_POLICY: Readonly<Partial<Record<MutationName, MutationPoli
   recordPayment: { permission: "payment.record", auditAction: PAYMENT_RECORDED },
   voidPayment: { permission: "payment.void", auditAction: PAYMENT_VOIDED },
   voidInvoice: { permission: "invoice.void", auditAction: INVOICE_VOIDED },
+  addDiscount: { permission: "discount.manage", auditAction: DISCOUNT_ADDED },
+  endDiscount: { permission: "discount.manage", auditAction: DISCOUNT_ENDED },
+  updatePlan: { permission: "settings.manage", auditAction: PLAN_UPDATED },
+  updateSettings: { permission: "settings.manage", auditAction: SETTINGS_UPDATED },
+  inviteUser: { permission: "role.manage", auditAction: ROLE_ASSIGNED },
+  setRole: { permission: "role.manage", auditAction: ROLE_ASSIGNED },
+  removeAccess: { permission: "role.manage", auditAction: ROLE_REVOKED },
+  recordScan: {
+    permission: "scan.record",
+    auditAction: "",
+    auditExemption: "The attendance row is the record of the check in",
+  },
 };
 
 /**
@@ -40,16 +60,7 @@ export const IDENTITY_MUTATIONS: readonly MutationName[] = ["signIn", "signOut",
  * moves it from this list to MUTATION_POLICY. Adding a name here to get past the guard test is
  * visible in review, and the test still fails for a name that is in neither place.
  */
-export const PENDING_MUTATIONS: readonly MutationName[] = [
-  "recordScan",
-  "addDiscount",
-  "endDiscount",
-  "updatePlan",
-  "updateSettings",
-  "inviteUser",
-  "setRole",
-  "removeAccess",
-];
+export const PENDING_MUTATIONS: readonly MutationName[] = [];
 
 export interface MutationGuardInput {
   /** Every mutation field in the schema. */
@@ -71,7 +82,8 @@ function policyProblems(name: string, policy: MutationPolicy): string[] {
   if (!isHeldByARole(policy.permission)) {
     problems.push(`${name}: permission "${policy.permission}" is held by no role`);
   }
-  if (policy.auditAction.trim() === "") {
+  const exempt = (policy.auditExemption ?? "").trim() !== "";
+  if (policy.auditAction.trim() === "" && !exempt) {
     problems.push(`${name}: no audit action declared`);
   }
   return problems;

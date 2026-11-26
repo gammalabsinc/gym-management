@@ -110,7 +110,7 @@ export function makeAddManualDiscount(deps: ManualDiscountDeps) {
  */
 export function makeEndDiscount(deps: ManualDiscountDeps) {
   return requirePermission<
-    { readonly discountId: string },
+    { readonly discountId: string; readonly reason?: string | undefined },
     ManualDiscountContext,
     EndedDiscount,
     DiscountError
@@ -140,7 +140,12 @@ export function makeEndDiscount(deps: ManualDiscountDeps) {
           entityType: "member_discount",
           entityId: id,
           before: { endsOn: discount.endsOn },
-          after: { endsOn: endsOn.value, memberId: discount.memberId, amount: discount.amount },
+          after: {
+            endsOn: endsOn.value,
+            memberId: discount.memberId,
+            amount: discount.amount,
+            ...(input.reason === undefined ? {} : { reason: input.reason }),
+          },
           requestId: ctx.requestId,
         });
         return ok({ id, memberId: discount.memberId, endsOn: endsOn.value });

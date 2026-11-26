@@ -57,7 +57,7 @@ export interface RemoveAccessInput {
 
 type RoleError = ValidationError | NotFoundError | ConflictError;
 
-const LAST_OWNER_MESSAGE = "A gym must keep at least one owner";
+export const LAST_OWNER_MESSAGE = "A gym must keep at least one owner";
 
 function toMember(record: StaffRecord): StaffMember {
   return {

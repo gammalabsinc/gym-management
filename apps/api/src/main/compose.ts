@@ -14,6 +14,7 @@ import type { VerifyGoogleIdToken } from "../app/google-sign-in";
 import { makeGreet } from "../app/greet";
 import { makeFindMembership } from "../app/gym-membership";
 import { makeListMyGyms } from "../app/gym-picker";
+import { makeAddManualDiscount, makeEndDiscount } from "../app/manual-discounts";
 import {
   makeMemberDiscounts,
   makeMemberInvoices,
@@ -26,16 +27,24 @@ import { makeListPlans } from "../app/plans";
 import { makePreviewPayment } from "../app/preview-payment";
 import { makeRateLimiter } from "../app/rate-limit";
 import { makeRecordPayment } from "../app/record-payment";
+import { makeRecordScan } from "../app/record-scan";
 import { makeResolveRequestSession } from "../app/request-session";
+import {
+  makeInviteUser,
+  makeListStaff,
+  makeRemoveAccess,
+  makeSetRole,
+} from "../app/role-management";
 import { makeSelectGym } from "../app/select-gym";
 import { makeSessions } from "../app/sessions";
 import { makeSignIn } from "../app/sign-in";
-import { makeGetTenant } from "../app/tenant-settings";
+import { makeGetTenant, makeUpdatePlan, makeUpdateSettings } from "../app/tenant-settings";
 import { makeVoidInvoice, makeVoidPayment } from "../app/voids";
 import { makeWhoAmI } from "../app/who-am-i";
-import { makeWithAttendanceQueryUnit } from "../infra/attendance/attendance-unit";
+import { makeWithAttendanceQueryUnit, makeWithScanUnit } from "../infra/attendance/attendance-unit";
 import { systemClock } from "../infra/clock";
 import type { Database } from "../infra/db/connection";
+import { makeWithDiscountUnit } from "../infra/discounts/discounts-unit";
 import { makeAccountDirectory, makeAccountLookup } from "../infra/google/accounts-sql";
 import { makeGoogleIdTokenVerifier } from "../infra/google/verify-id-token";
 import { uuidGenerator } from "../infra/ids";
@@ -54,6 +63,7 @@ import { makeWithPlanUnit } from "../infra/plans/plans-unit";
 import { expiresAfter } from "../infra/sessions/session-lifetime";
 import { sessionTokens } from "../infra/sessions/session-tokens";
 import { makeSessionStore } from "../infra/sessions/sessions-sql";
+import { makeWithStaffUnit } from "../infra/staff/staff-unit";
 import { makeWithGymPickerUnit } from "../infra/tenants/gym-picker-unit";
 import { makeGymRegistry } from "../infra/tenants/gym-registry-sql";
 import { makeWithSettingsUnit } from "../infra/tenants/settings-unit";
@@ -128,6 +138,8 @@ export function composeApp(deps: ComposeDeps) {
   };
   const withPaymentUnit = makeWithPaymentUnit(withTenantTx, audit);
   const voids = { withUnit: makeWithVoidUnit(withTenantTx, audit), clock: systemClock };
+  const discounts = { withUnit: makeWithDiscountUnit(withTenantTx, audit), clock: systemClock };
+  const staffDeps = { withUnit: makeWithStaffUnit(withTenantTx, audit), clock: systemClock };
   const getTenant = makeGetTenant({ withUnit: withSettingsUnit });
   const resolvers: ResolverDeps = {
     signIn: makeSignIn({ google: { verify, accounts }, sessions, listMyGyms }),
@@ -170,6 +182,15 @@ export function composeApp(deps: ComposeDeps) {
     recordPayment: makeRecordPayment({ withUnit: withPaymentUnit, clock: systemClock }),
     voidPayment: makeVoidPayment(voids),
     voidInvoice: makeVoidInvoice(voids),
+    addDiscount: makeAddManualDiscount(discounts),
+    endDiscount: makeEndDiscount(discounts),
+    updatePlan: makeUpdatePlan({ withUnit: withSettingsUnit }),
+    updateSettings: makeUpdateSettings({ withUnit: withSettingsUnit }),
+    listStaff: makeListStaff(staffDeps),
+    inviteUser: makeInviteUser(staffDeps),
+    setRole: makeSetRole(staffDeps),
+    removeAccess: makeRemoveAccess(staffDeps),
+    recordScan: makeRecordScan({ withUnit: makeWithScanUnit(withTenantTx), clock: systemClock }),
   };
   const resolveSession = bearerSessionResolver(
     makeResolveRequestSession({ sessions, findMembership }),
