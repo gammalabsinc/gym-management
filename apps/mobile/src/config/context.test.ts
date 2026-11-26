@@ -11,7 +11,11 @@ afterEach(cleanup);
 
 describe("ConfigProvider", () => {
   it("gives children the config", () => {
-    const config = { appEnv: "development", apiUrl: "http://localhost:3000" } as const;
+    const config = {
+      profile: "development",
+      apiUrl: "http://localhost:3000",
+      googleClientIds: null,
+    } as const;
     render(createElement(ConfigProvider, { config }, createElement(ShowUrl)));
     expect(screen.getByTestId("url").textContent).toBe("http://localhost:3000");
   });
