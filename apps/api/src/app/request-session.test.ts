@@ -55,6 +55,7 @@ describe("resolving the session of a request", () => {
       subject: "sub",
       userId: null,
       tenantId: null,
+      roles: [],
     });
     expect(checked).toEqual([]);
   });
@@ -66,6 +67,7 @@ describe("resolving the session of a request", () => {
       subject: "sub",
       userId: "u1",
       tenantId: GYM,
+      roles: ["owner"],
     });
     expect(checked).toEqual([`sub:${GYM}`]);
   });
@@ -77,6 +79,7 @@ describe("resolving the session of a request", () => {
       subject: "sub",
       userId: null,
       tenantId: null,
+      roles: [],
     });
   });
 });

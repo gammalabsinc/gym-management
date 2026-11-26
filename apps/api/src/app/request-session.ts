@@ -1,3 +1,4 @@
+import type { Role } from "../domain/permissions";
 import { parseBearerToken } from "../domain/session";
 import type { FindMembership } from "./gym-membership";
 import type { Sessions } from "./sessions";
@@ -12,6 +13,8 @@ export interface RequestSession {
   readonly userId: string | null;
   /** The bound gym. Null for an identity session. */
   readonly tenantId: string | null;
+  /** What the person holds in the bound gym, read again on every request. Empty for an identity session. */
+  readonly roles: readonly Role[];
 }
 
 export interface RequestSessionDeps {
@@ -32,9 +35,15 @@ export function makeResolveRequestSession(deps: RequestSessionDeps) {
     const authenticated = await deps.sessions.authenticate(token);
     if (!authenticated.ok) return null;
     const { sessionId, subject, gymId } = authenticated.value;
-    if (gymId === null) return { sessionId, subject, userId: null, tenantId: null };
+    if (gymId === null) return { sessionId, subject, userId: null, tenantId: null, roles: [] };
     const membership = await deps.findMembership(subject, gymId);
-    if (membership === null) return { sessionId, subject, userId: null, tenantId: null };
-    return { sessionId, subject, userId: membership.userId, tenantId: gymId };
+    if (membership === null) return { sessionId, subject, userId: null, tenantId: null, roles: [] };
+    return {
+      sessionId,
+      subject,
+      userId: membership.userId,
+      tenantId: gymId,
+      roles: membership.gym.roles,
+    };
   };
 }

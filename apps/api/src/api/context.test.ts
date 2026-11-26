@@ -51,7 +51,13 @@ describe("makeContextBuilder", () => {
   });
 
   it("takes the tenant from the session and tags log lines with it", async () => {
-    const session = { sessionId: "s1", subject: "s1", userId: "u1", tenantId: "t1" };
+    const session: Session = {
+      sessionId: "s1",
+      subject: "s1",
+      userId: "u1",
+      tenantId: "t1",
+      roles: ["owner"],
+    };
     const { build, lines } = setup(session);
     const ctx = await build(request());
     ctx.logger.info("hello");
@@ -66,6 +72,7 @@ describe("makeContextBuilder", () => {
       subject: "s1",
       userId: null,
       tenantId: null,
+      roles: [],
     });
     const ctx = await build(request());
     ctx.logger.info("hello");
@@ -84,7 +91,13 @@ describe("makeContextBuilder", () => {
   });
 
   it("ignores a tenant id the client sends in headers or query", async () => {
-    const { build } = setup({ sessionId: "s1", subject: "s1", userId: "u1", tenantId: "t1" });
+    const { build } = setup({
+      sessionId: "s1",
+      subject: "s1",
+      userId: "u1",
+      tenantId: "t1",
+      roles: ["owner"],
+    });
     const sneaky = new Request("http://localhost/graphql?tenantId=t2", {
       headers: { "x-tenant-id": "t2", "x-tenant": "t2", host: "t2.example.com" },
     });

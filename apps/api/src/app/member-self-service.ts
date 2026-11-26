@@ -13,6 +13,7 @@ import {
   toMemberProfile,
   type VisitMonth,
 } from "../domain/member-self";
+import type { MemberView } from "../domain/member-view";
 import { ok, type Result } from "../domain/result";
 import type { Tenant } from "../domain/tenant";
 import { memberQueryContext } from "./member-queries";
@@ -93,6 +94,31 @@ export function makeGetMyProfile(deps: MemberSelfServiceDeps) {
         );
         return member === null ? notFound(MEMBER_NOT_FOUND) : ok(toMemberProfile(member));
       }),
+  );
+}
+
+/**
+ * The caller's own member record, in the shape staff read. The id is checked against the member
+ * the session's user owns, so asking for anyone else's id is the same not found as an unknown id.
+ */
+export function makeGetOwnMember(deps: MemberSelfServiceDeps) {
+  return requirePermission<
+    { readonly memberId: string },
+    MemberSelfCaller,
+    MemberView,
+    NotFoundError
+  >(PERMISSION, async (input, ctx) =>
+    deps.withUnit(ctx.tenantId, async (unit) => {
+      const memberId = await ownMemberId(unit, ctx);
+      if (!memberId.ok) return memberId;
+      if (input.memberId !== memberId.value) return notFound(MEMBER_NOT_FOUND);
+      const tenant = await readTenant(unit);
+      const member = await unit.members.find(
+        memberId.value,
+        memberQueryContext(tenant, deps.clock.now()),
+      );
+      return member === null ? notFound(MEMBER_NOT_FOUND) : ok(member);
+    }),
   );
 }
 

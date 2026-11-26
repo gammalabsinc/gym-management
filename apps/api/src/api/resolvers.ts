@@ -1,13 +1,28 @@
 import type { Resolvers } from "@gym/graphql-schema";
 import type { makeEnterGym } from "../app/enter-gym";
 import type { makeListMyGyms } from "../app/gym-picker";
+import type { makeGetMember, makeListMembers } from "../app/member-queries";
+import type { makeGetOwnMember } from "../app/member-self-service";
+import type { makeListPlans } from "../app/plans";
 import type { SignedIn } from "../app/sign-in";
+import type { makeGetTenant } from "../app/tenant-settings";
 import type { makeWhoAmI } from "../app/who-am-i";
 import { forbidden, type UnauthenticatedError, unauthenticated } from "../domain/errors";
+import { hasPermission } from "../domain/permissions";
 import type { Result } from "../domain/result";
 import type { GraphQLContext } from "./context";
 import { parseInput } from "./input";
-import { toGqlGym, toGqlMe, toGqlTenant, toGraphQLError, toUserErrors } from "./mappers";
+import {
+  referrerIdOf,
+  toGqlGym,
+  toGqlMe,
+  toGqlMember,
+  toGqlMemberPage,
+  toGqlPlan,
+  toGqlTenant,
+  toGraphQLError,
+  toUserErrors,
+} from "./mappers";
 import { mutationArgs } from "./mutation-inputs";
 
 /** The use cases the resolvers call. The composition root builds them with real adapters. */
@@ -17,11 +32,30 @@ export interface ResolverDeps {
   readonly listMyGyms: ReturnType<typeof makeListMyGyms>;
   readonly enterGym: ReturnType<typeof makeEnterGym>;
   readonly whoAmI: ReturnType<typeof makeWhoAmI>;
+  readonly getTenant: ReturnType<typeof makeGetTenant>;
+  readonly listPlans: ReturnType<typeof makeListPlans>;
+  readonly listMembers: ReturnType<typeof makeListMembers>;
+  readonly getMember: ReturnType<typeof makeGetMember>;
+  readonly getOwnMember: ReturnType<typeof makeGetOwnMember>;
 }
 
 function requireSession(ctx: GraphQLContext) {
   if (ctx.session === null) throw toGraphQLError(unauthenticated().error);
   return ctx.session;
+}
+
+/** The caller inside a gym. Roles, user and gym all come from the session, never from the request. */
+function requireGym(ctx: GraphQLContext) {
+  const session = requireSession(ctx);
+  if (session.tenantId === null || session.userId === null) {
+    throw toGraphQLError(forbidden("Pick a gym first").error);
+  }
+  return {
+    tenantId: session.tenantId,
+    userId: session.userId,
+    roles: session.roles,
+    requestId: ctx.requestId,
+  };
 }
 
 /**
@@ -51,6 +85,41 @@ export function makeResolvers(deps?: ResolverDeps): Resolvers<GraphQLContext> {
         });
         if (!me.ok) throw toGraphQLError(me.error);
         return toGqlMe(me.value);
+      },
+      tenant: async (_parent, _args, ctx) => {
+        const tenant = await deps.getTenant(undefined, requireGym(ctx));
+        if (!tenant.ok) throw toGraphQLError(tenant.error);
+        return toGqlTenant(tenant.value);
+      },
+      plans: async (_parent, _args, ctx) => {
+        const plans = await deps.listPlans(undefined, requireGym(ctx));
+        if (!plans.ok) throw toGraphQLError(plans.error);
+        return plans.value.map(toGqlPlan);
+      },
+      members: async (_parent, args, ctx) => {
+        const page = await deps.listMembers(
+          { search: args.search, limit: args.page?.limit, cursor: args.page?.cursor },
+          requireGym(ctx),
+        );
+        if (!page.ok) throw toGraphQLError(page.error);
+        return toGqlMemberPage(page.value);
+      },
+      member: async (_parent, args, ctx) => {
+        const caller = requireGym(ctx);
+        const input = { memberId: args.id };
+        const found = hasPermission(caller.roles, "member.read")
+          ? await deps.getMember(input, caller)
+          : await deps.getOwnMember(input, caller);
+        if (!found.ok) throw toGraphQLError(found.error);
+        return toGqlMember(found.value);
+      },
+    },
+    Member: {
+      referredBy: async (parent, _args, ctx) => {
+        const id = referrerIdOf(parent);
+        if (id === null || ctx.loaders === null) return null;
+        const referrer = await ctx.loaders.member.load(id);
+        return referrer === null ? null : toGqlMember(referrer);
       },
     },
     Mutation: {
