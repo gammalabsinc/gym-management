@@ -8,6 +8,8 @@ import { createCardCache, type KeyValueLike } from "./card/cache";
 import { createCardService } from "./card/card";
 import type { CardDeps } from "./card/context";
 import type { RuntimeConfig } from "./config/build-config";
+import type { CustomersService } from "./customers/list";
+import { createCustomersService } from "./customers/list";
 import { createGyms, type Gyms } from "./gyms";
 import type { CameraPort } from "./scanner/camera";
 import type { ScannerDeps } from "./scanner/context";
@@ -31,6 +33,7 @@ export interface Services {
   readonly gyms: Gyms;
   readonly card: CardDeps;
   readonly scanner: ScannerDeps;
+  readonly customers: CustomersService;
 }
 
 export function newRequestId(): string {
@@ -81,5 +84,6 @@ export function composeServices(
     gyms,
     card: { service, brightness: platform.brightness },
     scanner: { service: createScanService({ client }), camera: platform.camera },
+    customers: createCustomersService({ client }),
   };
 }

@@ -11,6 +11,9 @@ vi.mock("../card/MemberCard", () => ({
 vi.mock("../scanner/Scanner", () => ({
   Scanner: () => createElement("div", null, "Scanner screen"),
 }));
+vi.mock("../customers/Customers", () => ({
+  Customers: () => createElement("div", null, "Customers screen"),
+}));
 vi.mock("../screens/GymPicker", () => ({
   GymPicker: () => createElement("div", null, "Pick a gym"),
 }));
@@ -65,6 +68,7 @@ describe("RootNavigator", () => {
     expect(screen.getByTestId("tab-Scan")).toBeTruthy();
     expect(screen.getByTestId("tab-Customers")).toBeTruthy();
     expect(screen.getByText("Scanner screen")).toBeTruthy();
+    expect(screen.getByText("Customers screen")).toBeTruthy();
     expect(screen.queryByTestId("tab-Card")).toBeNull();
   });
 

@@ -81,3 +81,24 @@ export function Modal(
 export const StyleSheet = { create: <T,>(styles: T): T => styles };
 
 export const Linking = { openSettings: async (): Promise<void> => undefined };
+
+/** Renders every row. Pull to refresh and end reached show as buttons, so tests can trigger them. */
+export function FlatList<T>(props: {
+  readonly data: readonly T[];
+  readonly keyExtractor: (item: T) => string;
+  readonly renderItem: (info: { item: T }) => ReactNode;
+  readonly onRefresh?: () => void;
+  readonly onEndReached?: () => void;
+  readonly refreshing?: boolean;
+  readonly contentContainerStyle?: Style;
+}) {
+  return (
+    <div data-testid="list" data-refreshing={String(props.refreshing === true)}>
+      <button type="button" aria-label="Pull to refresh" onClick={props.onRefresh} />
+      {props.data.map((item) => (
+        <div key={props.keyExtractor(item)}>{props.renderItem({ item })}</div>
+      ))}
+      <button type="button" aria-label="Reach the end" onClick={props.onEndReached} />
+    </div>
+  );
+}
