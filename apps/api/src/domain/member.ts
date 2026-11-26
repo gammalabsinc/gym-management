@@ -100,7 +100,25 @@ export function parseNewMember(
 }
 
 /** The only fields an edit may change. Everything else about a member is fixed after it is added. */
-export const EDITABLE_PROFILE_FIELDS = ["name", "phone"] as const;
+export const EDITABLE_PROFILE_FIELDS = ["name", "phone", "photoRef"] as const;
+
+/** Photos live in the bucket under the gym's own id, so a reference can only name an object of this gym. */
+const PHOTO_OBJECT_PATTERN =
+  /^members\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp)$/;
+
+/** The key of a member photo in the bucket: the gym id, then members/, then the object id and type. */
+export function photoRefIssues(ref: string, tenantId: string): FieldIssue[] {
+  const prefix = `${tenantId}/`;
+  const valid = ref.startsWith(prefix) && PHOTO_OBJECT_PATTERN.test(ref.slice(prefix.length));
+  return valid
+    ? []
+    : [
+        {
+          path: ["photoRef"],
+          message: "Must be a photo of this gym, ending in .jpg, .png or .webp",
+        },
+      ];
+}
 
 /** What staff type on the edit member screen. Fields outside the allow list are refused. */
 export interface MemberProfileEditInput {
@@ -112,6 +130,8 @@ export interface MemberProfileEditInput {
 export interface ProfileChange {
   readonly name?: string;
   readonly phone?: string | null;
+  /** The bucket key of the photo. A null photo reference removes the photo. */
+  readonly photoRef?: string | null;
 }
 
 export interface ParsedProfileEdit {
@@ -141,6 +161,18 @@ function parsePhoneChange(value: unknown): Result<string | null, ValidationError
   return ok(text.value === "" ? null : text.value);
 }
 
+function parsePhotoRefChange(
+  value: unknown,
+  tenantId: string,
+): Result<string | null, ValidationError> {
+  if (value === null) return ok(null);
+  const text = stringField(value, "photoRef");
+  if (!text.ok) return text;
+  if (text.value === "") return ok(null);
+  const issues = photoRefIssues(text.value, tenantId);
+  return issues.length > 0 ? validationError("Invalid member", issues) : text;
+}
+
 /**
  * Checks an edit against the allow list. A field outside the list, such as member_no, barcode or
  * email, is reported and nothing is written. Every problem is reported, and an edit with no
@@ -148,6 +180,7 @@ function parsePhoneChange(value: unknown): Result<string | null, ValidationError
  */
 export function parseProfileEdit(
   input: MemberProfileEditInput,
+  tenantId: string,
 ): Result<ParsedProfileEdit, ValidationError> {
   const memberId = parseUuid(input.memberId, "memberId");
   const sent = Object.keys(input.fields).filter((key) => input.fields[key] !== undefined);
@@ -160,14 +193,19 @@ export function parseProfileEdit(
   ];
   const name = sent.includes("name") ? parseNameChange(input.fields.name) : undefined;
   const phone = sent.includes("phone") ? parsePhoneChange(input.fields.phone) : undefined;
+  const photoRef = sent.includes("photoRef")
+    ? parsePhotoRefChange(input.fields.photoRef, tenantId)
+    : undefined;
   if (name?.ok === false) issues.push(...name.error.issues);
   if (phone?.ok === false) issues.push(...phone.error.issues);
+  if (photoRef?.ok === false) issues.push(...photoRef.error.issues);
   if (issues.length > 0 || !memberId.ok) return validationError("Invalid member", issues);
   return ok({
     memberId: memberId.value,
     change: {
       ...(name?.ok ? { name: name.value } : {}),
       ...(phone?.ok ? { phone: phone.value } : {}),
+      ...(photoRef?.ok ? { photoRef: photoRef.value } : {}),
     },
   });
 }

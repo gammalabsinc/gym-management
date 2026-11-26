@@ -89,6 +89,14 @@ async function userRow(g: Gym) {
   return rows[0] as { name: string | null; phone: string | null; email: string };
 }
 
+async function photoRef(g: Gym): Promise<string | null> {
+  const { rows } = await db.admin.query(
+    "SELECT photo_ref FROM users WHERE tenant_id = $1 AND id = $2",
+    [g.ctx.tenantId, g.memberUserId],
+  );
+  return (rows[0] as { photo_ref: string | null }).photo_ref;
+}
+
 describe("editing a member on a real database", () => {
   it("changes the name and keeps the phone and email", async () => {
     const g = await gym();
@@ -163,11 +171,47 @@ describe("editing a member on a real database", () => {
     expect((await userRow(g)).name).toBe("Ada");
   });
 
+  it("stores, replaces and removes the photo reference, and audits it", async () => {
+    const g = await gym();
+    const first = `${g.ctx.tenantId}/members/${randomUUID()}.jpg`;
+    const second = `${g.ctx.tenantId}/members/${randomUUID()}.webp`;
+    await editor()({ memberId: g.memberId, fields: { photoRef: first } }, g.ctx);
+    expect(await photoRef(g)).toBe(first);
+    await editor()({ memberId: g.memberId, fields: { photoRef: second, name: "Eve" } }, g.ctx);
+    expect(await userRow(g)).toMatchObject({ name: "Eve", phone: "416-555-0100" });
+    expect(await photoRef(g)).toBe(second);
+    await editor()({ memberId: g.memberId, fields: { photoRef: null } }, g.ctx);
+    expect(await photoRef(g)).toBeNull();
+    const audit = await db.admin.query(
+      "SELECT before, after FROM audit_events WHERE tenant_id = $1 ORDER BY occurred_at, id",
+      [g.ctx.tenantId],
+    );
+    expect(audit.rows).toHaveLength(3);
+  });
+
+  it("refuses a photo reference that names an object of another gym", async () => {
+    const a = await gym();
+    const b = await gym();
+    const foreign = `${b.ctx.tenantId}/members/${randomUUID()}.jpg`;
+    const result = await editor()({ memberId: a.memberId, fields: { photoRef: foreign } }, a.ctx);
+    expect(!result.ok && result.error.kind).toBe("validation");
+    expect(await photoRef(a)).toBeNull();
+  });
+
   it("never lets another gym see or change the member", async () => {
     const a = await gym();
     const b = await gym();
     const result = await editor()({ memberId: a.memberId, fields: { name: "Hostile" } }, b.ctx);
     expect(!result.ok && result.error.kind).toBe("not_found");
     expect((await userRow(a)).name).toBe("Ada");
+  });
+
+  it("never lets another gym set a photo reference on the member", async () => {
+    const a = await gym();
+    const b = await gym();
+    const ref = `${b.ctx.tenantId}/members/${randomUUID()}.jpg`;
+    const result = await editor()({ memberId: a.memberId, fields: { photoRef: ref } }, b.ctx);
+    expect(!result.ok && result.error.kind).toBe("not_found");
+    expect(await photoRef(a)).toBeNull();
   });
 });
