@@ -22,6 +22,7 @@ function platform(): Platform {
       setItem: vi.fn(async () => undefined),
       removeItem: vi.fn(async () => undefined),
     },
+    camera: { usePermission: vi.fn(), Scanner: vi.fn(), openSettings: vi.fn() },
     brightness: {
       getBrightnessAsync: vi.fn(async () => 0.4),
       setBrightnessAsync: vi.fn(async () => undefined),

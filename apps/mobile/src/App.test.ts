@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 vi.mock("expo-status-bar", () => ({ StatusBar: () => null }));
+const cameraFake = { usePermission: vi.fn(), Scanner: vi.fn(), openSettings: vi.fn() };
+
 const platform = {
   secureStore: {
     getItemAsync: vi.fn(async () => null),
@@ -17,6 +19,7 @@ const platform = {
     setItem: vi.fn(async () => undefined),
     removeItem: vi.fn(async () => undefined),
   },
+  camera: cameraFake,
   brightness: {
     getBrightnessAsync: vi.fn(async () => 0.5),
     setBrightnessAsync: vi.fn(async () => undefined),

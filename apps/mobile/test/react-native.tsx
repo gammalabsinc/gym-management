@@ -79,3 +79,5 @@ export function Modal(
 }
 
 export const StyleSheet = { create: <T,>(styles: T): T => styles };
+
+export const Linking = { openSettings: async (): Promise<void> => undefined };
