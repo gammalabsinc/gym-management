@@ -102,3 +102,7 @@ export function FlatList<T>(props: {
     </div>
   );
 }
+
+export const Alert = {
+  alert: (_title: string, _message?: string, _buttons?: readonly unknown[]): void => {},
+};
