@@ -5,7 +5,10 @@ import { makeRequestLoaders } from "../api/loaders";
 import { makeRequestContextBuilder } from "../api/request-context";
 import type { ResolverDeps } from "../api/resolvers";
 import { makeMemberHistory } from "../app/attendance-queries";
+import { makeCancelMember, makePauseMember, makeResumeMember } from "../app/change-membership";
 import type { Config } from "../app/config";
+import { makeCreateMember } from "../app/create-member";
+import { makeEditMember } from "../app/edit-member";
 import { makeEnterGym } from "../app/enter-gym";
 import type { VerifyGoogleIdToken } from "../app/google-sign-in";
 import { makeGreet } from "../app/greet";
@@ -22,11 +25,13 @@ import { makeGetOwnMember, makeGetOwnVisits } from "../app/member-self-service";
 import { makeListPlans } from "../app/plans";
 import { makePreviewPayment } from "../app/preview-payment";
 import { makeRateLimiter } from "../app/rate-limit";
+import { makeRecordPayment } from "../app/record-payment";
 import { makeResolveRequestSession } from "../app/request-session";
 import { makeSelectGym } from "../app/select-gym";
 import { makeSessions } from "../app/sessions";
 import { makeSignIn } from "../app/sign-in";
 import { makeGetTenant } from "../app/tenant-settings";
+import { makeVoidInvoice, makeVoidPayment } from "../app/voids";
 import { makeWhoAmI } from "../app/who-am-i";
 import { makeWithAttendanceQueryUnit } from "../infra/attendance/attendance-unit";
 import { systemClock } from "../infra/clock";
@@ -37,9 +42,14 @@ import { uuidGenerator } from "../infra/ids";
 import { makeWithLedgerUnit } from "../infra/ledger/ledger-unit";
 import { makeLogger } from "../infra/logger";
 import { makeWithLoaderUnit } from "../infra/members/loader-unit";
+import { randomCodes } from "../infra/members/member-codes";
 import { makeWithMemberQueryUnit } from "../infra/members/member-queries-unit";
 import { makeWithMemberSelfUnit } from "../infra/members/member-self-unit";
+import { makeWithMemberUnit } from "../infra/members/members-unit";
+import { makeWithProfileUnit } from "../infra/members/profiles-unit";
+import { makeWithMembershipUnit } from "../infra/memberships/memberships-unit";
 import { makeWithPaymentUnit } from "../infra/payments/payments-unit";
+import { makeWithVoidUnit } from "../infra/payments/voids-unit";
 import { makeWithPlanUnit } from "../infra/plans/plans-unit";
 import { expiresAfter } from "../infra/sessions/session-lifetime";
 import { sessionTokens } from "../infra/sessions/session-tokens";
@@ -111,6 +121,13 @@ export function composeApp(deps: ComposeDeps) {
   const withLoaderUnit = makeWithLoaderUnit(withTenantTx);
   const ledger = { withUnit: makeWithLedgerUnit(withTenantTx), clock: systemClock };
   const memberSelf = { withUnit: makeWithMemberSelfUnit(withTenantTx), clock: systemClock };
+  const audit = { clock: systemClock, ids: uuidGenerator };
+  const membership = {
+    withUnit: makeWithMembershipUnit(withTenantTx, audit),
+    clock: systemClock,
+  };
+  const withPaymentUnit = makeWithPaymentUnit(withTenantTx, audit);
+  const voids = { withUnit: makeWithVoidUnit(withTenantTx, audit), clock: systemClock };
   const getTenant = makeGetTenant({ withUnit: withSettingsUnit });
   const resolvers: ResolverDeps = {
     signIn: makeSignIn({ google: { verify, accounts }, sessions, listMyGyms }),
@@ -126,7 +143,7 @@ export function composeApp(deps: ComposeDeps) {
     }),
     getTenant,
     listPlans: makeListPlans({
-      withUnit: makeWithPlanUnit(withTenantTx, { clock: systemClock, ids: uuidGenerator }),
+      withUnit: makeWithPlanUnit(withTenantTx, audit),
     }),
     listMembers: makeListMembers(memberQueries),
     getMember: makeGetMember(memberQueries),
@@ -140,10 +157,19 @@ export function composeApp(deps: ComposeDeps) {
       clock: systemClock,
     }),
     ownVisits: makeGetOwnVisits(memberSelf),
-    previewPayment: makePreviewPayment({
-      withUnit: makeWithPaymentUnit(withTenantTx, { clock: systemClock, ids: uuidGenerator }),
+    previewPayment: makePreviewPayment({ withUnit: withPaymentUnit, clock: systemClock }),
+    createMember: makeCreateMember({
+      withUnit: makeWithMemberUnit(withTenantTx, audit),
       clock: systemClock,
+      codes: randomCodes,
     }),
+    editMember: makeEditMember({ withUnit: makeWithProfileUnit(withTenantTx, audit) }),
+    pauseMember: makePauseMember(membership),
+    resumeMember: makeResumeMember(membership),
+    cancelMember: makeCancelMember(membership),
+    recordPayment: makeRecordPayment({ withUnit: withPaymentUnit, clock: systemClock }),
+    voidPayment: makeVoidPayment(voids),
+    voidInvoice: makeVoidInvoice(voids),
   };
   const resolveSession = bearerSessionResolver(
     makeResolveRequestSession({ sessions, findMembership }),

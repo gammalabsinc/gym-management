@@ -15,7 +15,7 @@ import type { makePreviewPayment } from "../app/preview-payment";
 import type { SignedIn } from "../app/sign-in";
 import type { makeGetTenant } from "../app/tenant-settings";
 import type { makeWhoAmI } from "../app/who-am-i";
-import { forbidden, type UnauthenticatedError, unauthenticated } from "../domain/errors";
+import { forbidden, type UnauthenticatedError } from "../domain/errors";
 import { hasPermission } from "../domain/permissions";
 import type { Result } from "../domain/result";
 import type { GraphQLContext } from "./context";
@@ -38,10 +38,12 @@ import {
   toGraphQLError,
   toUserErrors,
 } from "./mappers";
+import { type MemberMutationDeps, makeMemberMutations } from "./member-mutations";
 import { mutationArgs } from "./mutation-inputs";
+import { requireGym, requireSession } from "./session-guard";
 
 /** The use cases the resolvers call. The composition root builds them with real adapters. */
-export interface ResolverDeps {
+export interface ResolverDeps extends MemberMutationDeps {
   readonly signIn: (idToken: string) => Promise<Result<SignedIn, UnauthenticatedError>>;
   readonly signOut: (token: string) => Promise<void>;
   readonly listMyGyms: ReturnType<typeof makeListMyGyms>;
@@ -59,25 +61,6 @@ export interface ResolverDeps {
   readonly memberVisits: ReturnType<typeof makeMemberHistory>;
   readonly ownVisits: ReturnType<typeof makeGetOwnVisits>;
   readonly previewPayment: ReturnType<typeof makePreviewPayment>;
-}
-
-function requireSession(ctx: GraphQLContext) {
-  if (ctx.session === null) throw toGraphQLError(unauthenticated().error);
-  return ctx.session;
-}
-
-/** The caller inside a gym. Roles, user and gym all come from the session, never from the request. */
-function requireGym(ctx: GraphQLContext) {
-  const session = requireSession(ctx);
-  if (session.tenantId === null || session.userId === null) {
-    throw toGraphQLError(forbidden("Pick a gym first").error);
-  }
-  return {
-    tenantId: session.tenantId,
-    userId: session.userId,
-    roles: session.roles,
-    requestId: ctx.requestId,
-  };
 }
 
 function pageInput(args: {
@@ -190,6 +173,7 @@ export function makeResolvers(deps?: ResolverDeps): Resolvers<GraphQLContext> {
       },
     },
     Mutation: {
+      ...makeMemberMutations(deps),
       signIn: async (_parent, args) => {
         const parsed = parseInput(mutationArgs.signIn, args);
         if (!parsed.ok)
