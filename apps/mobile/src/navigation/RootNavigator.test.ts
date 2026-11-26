@@ -8,6 +8,9 @@ import { SIGNED_OUT } from "../auth/session";
 vi.mock("../card/MemberCard", () => ({
   MemberCard: () => createElement("div", null, "Member card screen"),
 }));
+vi.mock("../attendance/Attendance", () => ({
+  Attendance: () => createElement("div", null, "Attendance screen"),
+}));
 vi.mock("../scanner/Scanner", () => ({
   Scanner: () => createElement("div", null, "Scanner screen"),
 }));
@@ -67,6 +70,7 @@ describe("RootNavigator", () => {
     expect(screen.getByTestId("tab-Card")).toBeTruthy();
     expect(screen.getByTestId("tab-Visits")).toBeTruthy();
     expect(screen.getByText("Member card screen")).toBeTruthy();
+    expect(screen.getByText("Attendance screen")).toBeTruthy();
     expect(screen.queryByTestId("tab-Scan")).toBeNull();
   });
 

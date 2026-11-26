@@ -1,4 +1,5 @@
 import { type Client, createClient } from "./api/client";
+import { type AttendanceService, createAttendanceService } from "./attendance/attendance";
 import { type Auth, createAuth } from "./auth/auth";
 import { createGoogleSignIn, type GoogleSigninLike } from "./auth/google";
 import { createSessionStore, type SessionStore } from "./auth/session-store";
@@ -38,6 +39,7 @@ export interface Services {
   readonly customers: CustomersService;
   readonly settings: SettingsService;
   readonly staff: StaffService;
+  readonly attendance: AttendanceService;
 }
 
 export function newRequestId(): string {
@@ -91,5 +93,6 @@ export function composeServices(
     customers: createCustomersService({ client }),
     settings: createSettingsService({ client }),
     staff: createStaffService({ client }),
+    attendance: createAttendanceService({ client }),
   };
 }

@@ -1,5 +1,6 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Attendance } from "../attendance/Attendance";
 import { type Destination, destinationFor, type Session } from "../auth/session";
 import { MemberCard } from "../card/MemberCard";
 import { Customers } from "../customers/Customers";
@@ -11,7 +12,7 @@ import { Staff } from "../staff/Staff";
 import { TabSet } from "./TabSet";
 import { adminTabsFor, CUSTOMER_TABS } from "./tabs";
 
-const CUSTOMER_SCREENS = { Card: () => <MemberCard /> };
+const CUSTOMER_SCREENS = { Card: () => <MemberCard />, Visits: () => <Attendance /> };
 const STAFF_SCREENS = {
   Scan: () => <Scanner />,
   Customers: () => <Customers />,

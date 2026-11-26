@@ -2,6 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import { ClientProvider } from "./api/hooks";
+import { AttendanceProvider } from "./attendance/context";
 import { AuthProvider, GymsProvider } from "./auth/context";
 import { CardProvider } from "./card/context";
 import { ConfigError, type RuntimeConfig } from "./config/build-config";
@@ -61,7 +62,9 @@ function Authenticated(props: { readonly config: RuntimeConfig; readonly platfor
               <CustomersProvider service={services.customers}>
                 <SettingsProvider service={services.settings}>
                   <StaffProvider service={services.staff}>
-                    {restored ? <RootNavigator session={session} /> : null}
+                    <AttendanceProvider service={services.attendance}>
+                      {restored ? <RootNavigator session={session} /> : null}
+                    </AttendanceProvider>
                   </StaffProvider>
                 </SettingsProvider>
               </CustomersProvider>
