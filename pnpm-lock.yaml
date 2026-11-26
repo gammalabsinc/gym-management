@@ -69,6 +69,9 @@ importers:
       '@gym/graphql-schema':
         specifier: workspace:*
         version: link:../../packages/graphql-schema
+      '@react-native-async-storage/async-storage':
+        specifier: ^3.1.1
+        version: 3.1.1(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
       '@react-native-google-signin/google-signin':
         specifier: ^17.0.0
         version: 17.0.0(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -81,6 +84,9 @@ importers:
       expo:
         specifier: ^58.0.25
         version: 58.0.25(@babel/core@8.1.2)(@expo/dom-webview@58.0.2)(react-dom@19.3.0(react@19.3.0))(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@7.0.2)
+      expo-brightness:
+        specifier: ^58.0.3
+        version: 58.0.3(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))
       expo-constants:
         specifier: ~58.0.16
         version: 58.0.16(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(typescript@7.0.2)
@@ -93,6 +99,9 @@ importers:
       graphql:
         specifier: ^17.1.0
         version: 17.1.0
+      qrcode-generator:
+        specifier: ^2.0.4
+        version: 2.0.4
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -1553,6 +1562,12 @@ packages:
   '@oxc-project/types@0.156.0':
     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
 
+  '@react-native-async-storage/async-storage@3.1.1':
+    resolution: {integrity: sha512-z+PnLz1n6ECKhgoHZHkfc+dijXZEyZnNFSajbtE0NEbsJhmX8x9GlOeiMQIKX2E4DUqPSgfIh4FYBv1M49KgPQ==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
   '@react-native-google-signin/google-signin@17.0.0':
     resolution: {integrity: sha512-FAnq5tkoq01np7jCzGjBYK1QPS61hJxjLJHJyJjQN3gaTwAZiGll18Xn3nygITMsZ/WoJ0jmskuHSG/oknUskQ==}
     peerDependencies:
@@ -2560,6 +2575,12 @@ packages:
       react: '*'
       react-native: '*'
 
+  expo-brightness@58.0.3:
+    resolution: {integrity: sha512-IV9Qj92nSOumcNSEG+3SpxpdKE7RkyvurnDzcRWs0lGDX3c+mpRYCkORIZ3H9IoRmsEqQToZL622ZOXOf2izhQ==}
+    peerDependencies:
+      expo: '*'
+      react-native: '*'
+
   expo-constants@58.0.16:
     resolution: {integrity: sha512-sVETnE1ktBMclc2Ve3qNrHhOCCio75a9JdghnJYGbqblmKfrrfE+lO9K4g9kNtmslIBLTK9Dyty6PbubkXs3Yw==}
     peerDependencies:
@@ -2843,6 +2864,9 @@ packages:
   iconv-lite@0.7.3:
     resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
     engines: {node: '>=0.10.0'}
+
+  idb@8.0.3:
+    resolution: {integrity: sha512-LtwtVyVYO5BqRvcsKuB2iUMnHwPVByPCXFXOpuU96IZPPoPN6xjOGxZQ74pgSVVLQWtUOYgyeL4GE98BY5D3wg==}
 
   ignore@5.3.2:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
@@ -3569,6 +3593,9 @@ packages:
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
+
+  qrcode-generator@2.0.4:
+    resolution: {integrity: sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==}
 
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
@@ -6083,6 +6110,12 @@ snapshots:
 
   '@oxc-project/types@0.156.0': {}
 
+  '@react-native-async-storage/async-storage@3.1.1(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      idb: 8.0.3
+      react: 19.3.0
+      react-native: 0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0)
+
   '@react-native-google-signin/google-signin@17.0.0(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)':
     dependencies:
       react: 19.3.0
@@ -7009,6 +7042,11 @@ snapshots:
       - supports-color
       - typescript
 
+  expo-brightness@58.0.3(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0)):
+    dependencies:
+      expo: 58.0.25(@babel/core@8.1.2)(@expo/dom-webview@58.0.2)(react-dom@19.3.0(react@19.3.0))(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@7.0.2)
+      react-native: 0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0)
+
   expo-constants@58.0.16(expo@58.0.25)(react-native@0.88.1(@babel/core@8.1.2)(@types/react@19.3.0)(react@19.3.0))(typescript@7.0.2):
     dependencies:
       '@expo/env': 2.6.0
@@ -7312,6 +7350,8 @@ snapshots:
   iconv-lite@0.7.3:
     dependencies:
       safer-buffer: 2.1.2
+
+  idb@8.0.3: {}
 
   ignore@5.3.2: {}
 
@@ -8198,6 +8238,8 @@ snapshots:
       sisteransi: 1.0.5
 
   punycode@2.3.1: {}
+
+  qrcode-generator@2.0.4: {}
 
   range-parser@1.2.1: {}
 

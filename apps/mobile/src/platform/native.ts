@@ -1,4 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import * as Brightness from "expo-brightness";
 import * as SecureStore from "expo-secure-store";
 import type { Platform } from "../services";
 
@@ -7,4 +9,6 @@ export const nativePlatform: Platform = {
   secureStore: SecureStore,
   accessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
   google: GoogleSignin,
+  storage: AsyncStorage,
+  brightness: Brightness,
 };

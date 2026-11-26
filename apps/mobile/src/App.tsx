@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import { ClientProvider } from "./api/hooks";
 import { AuthProvider, GymsProvider } from "./auth/context";
+import { CardProvider } from "./card/context";
 import { ConfigError, type RuntimeConfig } from "./config/build-config";
 import { ConfigProvider } from "./config/context";
 import { type ConstantsLike, loadRuntimeConfig } from "./config/load";
@@ -51,7 +52,9 @@ function Authenticated(props: { readonly config: RuntimeConfig; readonly platfor
         <StatusBar style="auto" />
         <ProfileMarker profile={config.profile} />
         <GymsProvider gyms={services.gyms}>
-          {restored ? <RootNavigator session={session} /> : null}
+          <CardProvider deps={services.card}>
+            {restored ? <RootNavigator session={session} /> : null}
+          </CardProvider>
         </GymsProvider>
       </AuthProvider>
     </ClientProvider>

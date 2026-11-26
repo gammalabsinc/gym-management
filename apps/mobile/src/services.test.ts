@@ -17,6 +17,15 @@ function platform(): Platform {
     },
     accessible: 3,
     google: { configure: vi.fn(), signIn: vi.fn(), signOut: vi.fn(async () => undefined) },
+    storage: {
+      getItem: vi.fn(async () => null),
+      setItem: vi.fn(async () => undefined),
+      removeItem: vi.fn(async () => undefined),
+    },
+    brightness: {
+      getBrightnessAsync: vi.fn(async () => 0.4),
+      setBrightnessAsync: vi.fn(async () => undefined),
+    },
   };
 }
 
@@ -44,6 +53,19 @@ describe("composeServices", () => {
     await s.auth.signOut();
     expect(s.store.getSession().status).toBe("signedOut");
     expect(p.secureStore.deleteItemAsync).toHaveBeenCalled();
+  });
+
+  it("drops the cached card when the session is no longer bound to a gym", async () => {
+    const p = platform();
+    const s = composeServices(config, p, vi.fn());
+    s.store.signInIdentity("t");
+    const before = vi.mocked(p.storage.removeItem).mock.calls.length;
+    s.store.enterGym("member", "t1");
+    expect(p.storage.removeItem).toHaveBeenCalledTimes(before);
+    s.store.leaveGym();
+    expect(p.storage.removeItem).toHaveBeenCalledTimes(before + 1);
+    s.store.signOut();
+    expect(p.storage.removeItem).toHaveBeenCalledTimes(before + 2);
   });
 
   it("makes distinct request ids", () => {
