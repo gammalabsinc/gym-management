@@ -12,6 +12,7 @@ import type {
   MutationRecordScanArgs,
   MutationSelectGymArgs,
   MutationSetRoleArgs,
+  MutationSignInArgs,
   MutationUpdateMemberArgs,
   MutationUpdatePlanArgs,
   MutationUpdateSettingsArgs,
@@ -48,7 +49,7 @@ describe("schemas stay in step with schema.graphql (checked by tsc)", () => {
     expectTypeOf<keyof typeof mutationArgs>().toEqualTypeOf<
       Exclude<keyof Mutation, "__typename">
     >();
-    expect(Object.keys(mutationArgs)).toHaveLength(13);
+    expect(Object.keys(mutationArgs)).toHaveLength(15);
   });
 
   it("has the same fields as every input object", () => {
@@ -61,6 +62,7 @@ describe("schemas stay in step with schema.graphql (checked by tsc)", () => {
   });
 
   it("has the same arguments as every mutation", () => {
+    expectTypeOf<Keys<typeof mutationArgs.signIn>>().toEqualTypeOf<keyof MutationSignInArgs>();
     expectTypeOf<Keys<typeof mutationArgs.selectGym>>().toEqualTypeOf<
       keyof MutationSelectGymArgs
     >();
@@ -280,6 +282,15 @@ describe("mutationArgs", () => {
       }),
     ).toBe(true);
     expect(ok(mutationArgs.updateSettings, { input: { dupWindowMin: 5 } })).toBe(true);
+  });
+
+  it("takes a bounded Google ID token to sign in and nothing to sign out", () => {
+    expect(mutationArgs.signIn.parse({ idToken: " a.b.c " })).toEqual({ idToken: "a.b.c" });
+    expect(ok(mutationArgs.signIn, { idToken: " " })).toBe(false);
+    expect(ok(mutationArgs.signIn, { idToken: "t".repeat(LIMITS.idToken + 1) })).toBe(false);
+    expect(ok(mutationArgs.signIn, { idToken: "a.b.c", extra: 1 })).toBe(false);
+    expect(ok(mutationArgs.signOut, {})).toBe(true);
+    expect(ok(mutationArgs.signOut, { token: "x" })).toBe(false);
   });
 
   it("requires a reason, within the limit, to void or end anything", () => {

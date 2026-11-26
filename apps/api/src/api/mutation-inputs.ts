@@ -96,6 +96,8 @@ export const settingsInput = z
 
 /** Arguments of each mutation, keyed by mutation name. A resolver parses its args with its entry. */
 export const mutationArgs = {
+  signIn: z.object({ idToken: boundedText(LIMITS.idToken) }).strict(),
+  signOut: z.object({}).strict(),
   selectGym: z.object({ tenantId: idSchema }).strict(),
   recordScan: z
     .object({

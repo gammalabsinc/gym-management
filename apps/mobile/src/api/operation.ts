@@ -51,6 +51,7 @@ interface RootArgs {
     recordPayment: Schema.MutationRecordPaymentArgs;
     recordScan: Schema.MutationRecordScanArgs;
     selectGym: Schema.MutationSelectGymArgs;
+    signIn: Schema.MutationSignInArgs;
     setRole: Schema.MutationSetRoleArgs;
     updateMember: Schema.MutationUpdateMemberArgs;
     updatePlan: Schema.MutationUpdatePlanArgs;

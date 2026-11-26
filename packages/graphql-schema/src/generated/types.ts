@@ -231,6 +231,8 @@ export type Mutation = {
   recordScan: ScanPayload;
   selectGym: SelectGymPayload;
   setRole: StaffPayload;
+  signIn: SignInPayload;
+  signOut: Scalars['Boolean']['output'];
   updateMember: MemberPayload;
   updatePlan: PlanPayload;
   updateSettings: TenantPayload;
@@ -282,6 +284,11 @@ export type MutationSetRoleArgs = {
   isOn: Scalars['Boolean']['input'];
   role: Role;
   userId: Scalars['ID']['input'];
+};
+
+
+export type MutationSignInArgs = {
+  idToken: Scalars['String']['input'];
 };
 
 
@@ -509,6 +516,14 @@ export type SettingsInput = {
   warnDaysBefore?: InputMaybe<Scalars['Int']['input']>;
 };
 
+export type SignInPayload = {
+  __typename?: 'SignInPayload';
+  errors: Array<UserError>;
+  expiresAt?: Maybe<Scalars['DateTime']['output']>;
+  gyms: Array<Gym>;
+  token?: Maybe<Scalars['String']['output']>;
+};
+
 export type StaffPayload = {
   __typename?: 'StaffPayload';
   errors: Array<UserError>;
@@ -703,6 +718,7 @@ export type ResolversTypes = ResolversObject<{
   ScanSource: ScanSource;
   SelectGymPayload: ResolverTypeWrapper<SelectGymPayload>;
   SettingsInput: SettingsInput;
+  SignInPayload: ResolverTypeWrapper<SignInPayload>;
   StaffPayload: ResolverTypeWrapper<StaffPayload>;
   StaffUser: ResolverTypeWrapper<StaffUser>;
   Standing: Standing;
@@ -757,6 +773,7 @@ export type ResolversParentTypes = ResolversObject<{
   ScanPayload: ScanPayload;
   SelectGymPayload: SelectGymPayload;
   SettingsInput: SettingsInput;
+  SignInPayload: SignInPayload;
   StaffPayload: StaffPayload;
   StaffUser: StaffUser;
   String: Scalars['String']['output'];
@@ -930,6 +947,8 @@ export type MutationResolvers<ContextType = any, ParentType extends ResolversPar
   recordScan?: Resolver<ResolversTypes['ScanPayload'], ParentType, ContextType, RequireFields<MutationRecordScanArgs, 'barcode' | 'source'>>;
   selectGym?: Resolver<ResolversTypes['SelectGymPayload'], ParentType, ContextType, RequireFields<MutationSelectGymArgs, 'tenantId'>>;
   setRole?: Resolver<ResolversTypes['StaffPayload'], ParentType, ContextType, RequireFields<MutationSetRoleArgs, 'isOn' | 'role' | 'userId'>>;
+  signIn?: Resolver<ResolversTypes['SignInPayload'], ParentType, ContextType, RequireFields<MutationSignInArgs, 'idToken'>>;
+  signOut?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   updateMember?: Resolver<ResolversTypes['MemberPayload'], ParentType, ContextType, RequireFields<MutationUpdateMemberArgs, 'id' | 'patch'>>;
   updatePlan?: Resolver<ResolversTypes['PlanPayload'], ParentType, ContextType, RequireFields<MutationUpdatePlanArgs, 'id' | 'input'>>;
   updateSettings?: Resolver<ResolversTypes['TenantPayload'], ParentType, ContextType, RequireFields<MutationUpdateSettingsArgs, 'input'>>;
@@ -1016,6 +1035,13 @@ export type SelectGymPayloadResolvers<ContextType = any, ParentType extends Reso
   errors?: Resolver<Array<ResolversTypes['UserError']>, ParentType, ContextType>;
   me?: Resolver<Maybe<ResolversTypes['Me']>, ParentType, ContextType>;
   tenant?: Resolver<Maybe<ResolversTypes['Tenant']>, ParentType, ContextType>;
+}>;
+
+export type SignInPayloadResolvers<ContextType = any, ParentType extends ResolversParentTypes['SignInPayload'] = ResolversParentTypes['SignInPayload']> = ResolversObject<{
+  errors?: Resolver<Array<ResolversTypes['UserError']>, ParentType, ContextType>;
+  expiresAt?: Resolver<Maybe<ResolversTypes['DateTime']>, ParentType, ContextType>;
+  gyms?: Resolver<Array<ResolversTypes['Gym']>, ParentType, ContextType>;
+  token?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
 }>;
 
 export type StaffPayloadResolvers<ContextType = any, ParentType extends ResolversParentTypes['StaffPayload'] = ResolversParentTypes['StaffPayload']> = ResolversObject<{
@@ -1107,6 +1133,7 @@ export type Resolvers<ContextType = any> = ResolversObject<{
   Query?: QueryResolvers<ContextType>;
   ScanPayload?: ScanPayloadResolvers<ContextType>;
   SelectGymPayload?: SelectGymPayloadResolvers<ContextType>;
+  SignInPayload?: SignInPayloadResolvers<ContextType>;
   StaffPayload?: StaffPayloadResolvers<ContextType>;
   StaffUser?: StaffUserResolvers<ContextType>;
   Tenant?: TenantResolvers<ContextType>;
