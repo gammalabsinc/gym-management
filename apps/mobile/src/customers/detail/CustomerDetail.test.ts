@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CustomerDetail, FORBIDDEN_MESSAGE } from "./CustomerDetail";
 import { DetailProvider, useDetailService } from "./context";
+import { AMOUNT_ZERO, DISCOUNT_NOTE, readAmount } from "./DiscountSheet";
 import { REASON_MAX, REASON_REQUIRED, REASON_TOO_LONG } from "./ReasonSheet";
 import type {
   ActionResult,
@@ -147,6 +148,8 @@ function fake(over: Partial<DetailService> = {}): DetailService {
     changeStatus: vi.fn(async (): Promise<ActionResult> => ({ status: "done" })),
     voidPayment: vi.fn(async (): Promise<ActionResult> => ({ status: "done" })),
     voidInvoice: vi.fn(async (): Promise<ActionResult> => ({ status: "done" })),
+    addDiscount: vi.fn(async (): Promise<ActionResult> => ({ status: "done" })),
+    endDiscount: vi.fn(async (): Promise<ActionResult> => ({ status: "done" })),
     ...over,
   };
 }
@@ -628,5 +631,183 @@ describe("CustomerDetail voids", () => {
     fireEvent.click(screen.getByText("Void payment"));
     await settle();
     expect(screen.getByText(FORBIDDEN_MESSAGE)).toBeTruthy();
+  });
+});
+
+/** A service whose discounts loader counts how many times the tab was loaded. */
+function withCountedDiscounts(over: Partial<DetailService> = {}) {
+  const load = vi.fn(fake().discounts("m1"));
+  return { load, service: fake({ discounts: () => load, ...over }) };
+}
+
+describe("CustomerDetail discounts", () => {
+  const typeInto = (label: string, value: string) =>
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  const openAdd = async (service: DetailService) => {
+    mount(service);
+    await settle();
+    await open("Discounts");
+    fireEvent.click(screen.getByLabelText("Add discount"));
+  };
+  const saveButton = () => screen.getAllByLabelText("Add discount").at(-1) as HTMLButtonElement;
+
+  it("shows Add and End to owners only, and End only for a running monthly manual discount", async () => {
+    mount(fake());
+    await settle();
+    await open("Discounts");
+    expect(screen.getByLabelText("Add discount")).toBeTruthy();
+    // d1 is manual, monthly and active. d2 is referral and d3 has ended.
+    expect(screen.getAllByText(/^End discount of/).length).toBe(1);
+    expect(screen.getByText("End discount of $5.00")).toBeTruthy();
+  });
+
+  it("shows neither to staff", async () => {
+    mount(fake(), "staff");
+    await settle();
+    await open("Discounts");
+    expect(screen.queryByLabelText("Add discount")).toBeNull();
+    expect(screen.queryByText(/^End discount of/)).toBeNull();
+  });
+
+  it("keeps Save off until the amount and the reason are right", async () => {
+    await openAdd(fake());
+    expect(saveButton().disabled).toBe(true);
+    typeInto("Amount", "5.00");
+    expect(saveButton().disabled).toBe(true);
+    typeInto("Reason", "Loyalty");
+    expect(saveButton().disabled).toBe(false);
+    typeInto("Amount", "0");
+    expect(screen.getByText(AMOUNT_ZERO)).toBeTruthy();
+    expect(saveButton().disabled).toBe(true);
+    typeInto("Amount", "5.005");
+    expect(screen.getByText("Use at most 2 decimal places.")).toBeTruthy();
+    typeInto("Amount", "5");
+    typeInto("Reason", "   ");
+    expect(screen.getByText(REASON_REQUIRED)).toBeTruthy();
+    typeInto("Reason", "x".repeat(REASON_MAX + 1));
+    expect(screen.getByText(REASON_TOO_LONG)).toBeTruthy();
+    expect(saveButton().disabled).toBe(true);
+  });
+
+  it("saves a one time discount in minor units, says when it starts, and reloads the list", async () => {
+    const { service, load } = withCountedDiscounts();
+    await openAdd(service);
+    expect(screen.getByText(DISCOUNT_NOTE)).toBeTruthy();
+    typeInto("Amount", "12.50");
+    typeInto("Reason", "  Goodwill ");
+    fireEvent.click(saveButton());
+    await settle();
+    expect(service.addDiscount).toHaveBeenCalledWith("m1", {
+      amount: 1250,
+      isRecurring: false,
+      reason: "Goodwill",
+    });
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(service.header).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(DISCOUNT_NOTE)).toBeTruthy();
+    expect(screen.queryByLabelText("Cancel")).toBeNull();
+  });
+
+  it("saves a monthly discount when Every month is chosen", async () => {
+    const service = fake();
+    await openAdd(service);
+    typeInto("Amount", "3");
+    typeInto("Reason", "Staff rate");
+    fireEvent.click(screen.getByLabelText("Every month"));
+    fireEvent.click(saveButton());
+    await settle();
+    expect(service.addDiscount).toHaveBeenCalledWith("m1", {
+      amount: 300,
+      isRecurring: true,
+      reason: "Staff rate",
+    });
+  });
+
+  it("can switch back to One time before saving", async () => {
+    const service = fake();
+    await openAdd(service);
+    typeInto("Amount", "3");
+    typeInto("Reason", "Staff rate");
+    fireEvent.click(screen.getByLabelText("Every month"));
+    fireEvent.click(screen.getByLabelText("One time"));
+    fireEvent.click(saveButton());
+    await settle();
+    expect(service.addDiscount).toHaveBeenCalledWith(
+      "m1",
+      expect.objectContaining({ isRecurring: false }),
+    );
+  });
+
+  it("ignores a press on Save while the form is not valid", async () => {
+    const service = fake();
+    await openAdd(service);
+    fireEvent.click(saveButton());
+    expect(service.addDiscount).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's message in the sheet and keeps it open", async () => {
+    const service = fake({
+      addDiscount: vi.fn(async () => ({ status: "invalid" as const, message: "Too large" })),
+    });
+    await openAdd(service);
+    typeInto("Amount", "9");
+    typeInto("Reason", "Because");
+    fireEvent.click(saveButton());
+    await settle();
+    expect(screen.getByText("Too large")).toBeTruthy();
+    expect(screen.queryByText(DISCOUNT_NOTE, { selector: "[data-role=summary]" })).toBeNull();
+  });
+
+  it("closes the sheet and shows a banner when the owner has lost the role", async () => {
+    const service = fake({ addDiscount: vi.fn(async () => ({ status: "forbidden" as const })) });
+    await openAdd(service);
+    typeInto("Amount", "9");
+    typeInto("Reason", "Because");
+    fireEvent.click(saveButton());
+    await settle();
+    expect(screen.getByText(FORBIDDEN_MESSAGE)).toBeTruthy();
+  });
+
+  it("cancels the sheet", async () => {
+    await openAdd(fake());
+    fireEvent.click(screen.getByLabelText("Cancel"));
+    expect(screen.queryByLabelText("Amount")).toBeNull();
+  });
+
+  it("ends a monthly discount with a reason, then reloads", async () => {
+    const { service, load } = withCountedDiscounts();
+    mount(service);
+    await settle();
+    await open("Discounts");
+    fireEvent.click(screen.getByText("End discount of $5.00"));
+    expect(screen.getByText("End this discount?")).toBeTruthy();
+    fill("Member left the offer");
+    fireEvent.click(screen.getByLabelText("End discount"));
+    await settle();
+    expect(service.endDiscount).toHaveBeenCalledWith("d1", "Member left the offer");
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the server's reason and loads again when the discount changed under the owner", async () => {
+    const { service, load } = withCountedDiscounts({
+      endDiscount: vi.fn(async () => ({ status: "refused" as const, message: "Already ended" })),
+    });
+    mount(service);
+    await settle();
+    await open("Discounts");
+    fireEvent.click(screen.getByText("End discount of $5.00"));
+    fill("Done");
+    fireEvent.click(screen.getByLabelText("End discount"));
+    await settle();
+    expect(screen.getByText("Already ended")).toBeTruthy();
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("readAmount", () => {
+  it("returns minor units for a positive amount and a message otherwise", () => {
+    expect(readAmount("1,250.50", "USD")).toEqual({ ok: true, minor: 125050 });
+    expect(readAmount("0.00", "USD")).toEqual({ ok: false, error: AMOUNT_ZERO });
+    expect(readAmount("abc", "USD")).toEqual({ ok: false, error: "Enter an amount, like 50.00." });
   });
 });

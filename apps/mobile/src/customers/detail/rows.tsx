@@ -125,7 +125,12 @@ export function VisitCard(props: { readonly row: VisitRow; readonly timezone: st
   );
 }
 
-export function DiscountCard(props: { readonly row: DiscountRow; readonly currency: string }) {
+export function DiscountCard(props: {
+  readonly row: DiscountRow;
+  readonly currency: string;
+  /** Owners only, and only for a monthly discount that is still running. */
+  readonly onEnd: (() => void) | null;
+}) {
   const { row } = props;
   const status = row.isActive ? "active" : row.isConsumed ? "used" : "ended";
   return (
@@ -137,7 +142,15 @@ export function DiscountCard(props: { readonly row: DiscountRow; readonly curren
         row.reason,
         `From ${formatDate(row.startsOn)}${row.endsOn === null ? "" : ` to ${formatDate(row.endsOn)}`}`,
       ]}
-    />
+    >
+      {props.onEnd === null ? null : (
+        <Button
+          label={`End discount of ${formatMoney(row.amount, props.currency)}`}
+          kind="secondary"
+          onPress={props.onEnd}
+        />
+      )}
+    </Card>
   );
 }
 

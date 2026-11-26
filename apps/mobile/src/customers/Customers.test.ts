@@ -46,6 +46,8 @@ const detail: DetailService = {
   changeStatus: async () => ({ status: "done" }),
   voidPayment: async () => ({ status: "done" }),
   voidInvoice: async () => ({ status: "done" }),
+  addDiscount: async () => ({ status: "done" }),
+  endDiscount: async () => ({ status: "done" }),
 };
 
 const members: MembersService = {
