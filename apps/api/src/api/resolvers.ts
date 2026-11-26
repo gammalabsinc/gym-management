@@ -1,9 +1,17 @@
 import type { Resolvers } from "@gym/graphql-schema";
+import type { makeMemberHistory } from "../app/attendance-queries";
 import type { makeEnterGym } from "../app/enter-gym";
 import type { makeListMyGyms } from "../app/gym-picker";
+import type {
+  makeMemberDiscounts,
+  makeMemberInvoices,
+  makeMemberPayments,
+  makeMembershipHistory,
+} from "../app/member-ledger";
 import type { makeGetMember, makeListMembers } from "../app/member-queries";
-import type { makeGetOwnMember } from "../app/member-self-service";
+import type { makeGetOwnMember, makeGetOwnVisits } from "../app/member-self-service";
 import type { makeListPlans } from "../app/plans";
+import type { makePreviewPayment } from "../app/preview-payment";
 import type { SignedIn } from "../app/sign-in";
 import type { makeGetTenant } from "../app/tenant-settings";
 import type { makeWhoAmI } from "../app/who-am-i";
@@ -14,12 +22,19 @@ import type { GraphQLContext } from "./context";
 import { parseInput } from "./input";
 import {
   referrerIdOf,
+  toGqlDiscount,
   toGqlGym,
+  toGqlInvoice,
   toGqlMe,
   toGqlMember,
   toGqlMemberPage,
+  toGqlPage,
+  toGqlPayment,
+  toGqlPeriod,
   toGqlPlan,
+  toGqlPreview,
   toGqlTenant,
+  toGqlVisit,
   toGraphQLError,
   toUserErrors,
 } from "./mappers";
@@ -37,6 +52,13 @@ export interface ResolverDeps {
   readonly listMembers: ReturnType<typeof makeListMembers>;
   readonly getMember: ReturnType<typeof makeGetMember>;
   readonly getOwnMember: ReturnType<typeof makeGetOwnMember>;
+  readonly invoices: ReturnType<typeof makeMemberInvoices>;
+  readonly payments: ReturnType<typeof makeMemberPayments>;
+  readonly discounts: ReturnType<typeof makeMemberDiscounts>;
+  readonly membershipPeriods: ReturnType<typeof makeMembershipHistory>;
+  readonly memberVisits: ReturnType<typeof makeMemberHistory>;
+  readonly ownVisits: ReturnType<typeof makeGetOwnVisits>;
+  readonly previewPayment: ReturnType<typeof makePreviewPayment>;
 }
 
 function requireSession(ctx: GraphQLContext) {
@@ -56,6 +78,13 @@ function requireGym(ctx: GraphQLContext) {
     roles: session.roles,
     requestId: ctx.requestId,
   };
+}
+
+function pageInput(args: {
+  readonly memberId: string;
+  readonly page?: { readonly limit?: number | null; readonly cursor?: string | null } | null;
+}) {
+  return { memberId: args.memberId, limit: args.page?.limit, cursor: args.page?.cursor };
 }
 
 /**
@@ -103,6 +132,44 @@ export function makeResolvers(deps?: ResolverDeps): Resolvers<GraphQLContext> {
         );
         if (!page.ok) throw toGraphQLError(page.error);
         return toGqlMemberPage(page.value);
+      },
+      invoices: async (_parent, args, ctx) => {
+        const page = await deps.invoices(pageInput(args), requireGym(ctx));
+        if (!page.ok) throw toGraphQLError(page.error);
+        return toGqlPage(page.value, (row) => toGqlInvoice(args.memberId, row));
+      },
+      payments: async (_parent, args, ctx) => {
+        const page = await deps.payments(pageInput(args), requireGym(ctx));
+        if (!page.ok) throw toGraphQLError(page.error);
+        return toGqlPage(page.value, (row) => toGqlPayment(args.memberId, row));
+      },
+      discounts: async (_parent, args, ctx) => {
+        const page = await deps.discounts({ memberId: args.memberId }, requireGym(ctx));
+        if (!page.ok) throw toGraphQLError(page.error);
+        return page.value.items.map((row) => toGqlDiscount(args.memberId, row));
+      },
+      membershipPeriods: async (_parent, args, ctx) => {
+        const caller = requireGym(ctx);
+        if (!hasPermission(caller.roles, "member.read")) {
+          throw toGraphQLError(forbidden().error);
+        }
+        const page = await deps.membershipPeriods({ memberId: args.memberId }, caller);
+        if (!page.ok) throw toGraphQLError(page.error);
+        return page.value.items.map((row) => toGqlPeriod(args.memberId, row));
+      },
+      visits: async (_parent, args, ctx) => {
+        const caller = requireGym(ctx);
+        const input = { ...pageInput(args) };
+        const page = hasPermission(caller.roles, "member.read")
+          ? await deps.memberVisits(input, caller)
+          : await deps.ownVisits(input, caller);
+        if (!page.ok) throw toGraphQLError(page.error);
+        return { items: page.value.items.map(toGqlVisit), nextCursor: page.value.nextCursor };
+      },
+      previewPayment: async (_parent, args, ctx) => {
+        const preview = await deps.previewPayment(args, requireGym(ctx));
+        if (!preview.ok) throw toGraphQLError(preview.error);
+        return toGqlPreview(preview.value);
       },
       member: async (_parent, args, ctx) => {
         const caller = requireGym(ctx);

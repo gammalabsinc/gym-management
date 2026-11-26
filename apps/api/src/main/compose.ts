@@ -4,15 +4,23 @@ import { makeGreetingResolver } from "../api/greeting";
 import { makeRequestLoaders } from "../api/loaders";
 import { makeRequestContextBuilder } from "../api/request-context";
 import type { ResolverDeps } from "../api/resolvers";
+import { makeMemberHistory } from "../app/attendance-queries";
 import type { Config } from "../app/config";
 import { makeEnterGym } from "../app/enter-gym";
 import type { VerifyGoogleIdToken } from "../app/google-sign-in";
 import { makeGreet } from "../app/greet";
 import { makeFindMembership } from "../app/gym-membership";
 import { makeListMyGyms } from "../app/gym-picker";
+import {
+  makeMemberDiscounts,
+  makeMemberInvoices,
+  makeMemberPayments,
+  makeMembershipHistory,
+} from "../app/member-ledger";
 import { makeGetMember, makeListMembers } from "../app/member-queries";
-import { makeGetOwnMember } from "../app/member-self-service";
+import { makeGetOwnMember, makeGetOwnVisits } from "../app/member-self-service";
 import { makeListPlans } from "../app/plans";
+import { makePreviewPayment } from "../app/preview-payment";
 import { makeRateLimiter } from "../app/rate-limit";
 import { makeResolveRequestSession } from "../app/request-session";
 import { makeSelectGym } from "../app/select-gym";
@@ -20,15 +28,18 @@ import { makeSessions } from "../app/sessions";
 import { makeSignIn } from "../app/sign-in";
 import { makeGetTenant } from "../app/tenant-settings";
 import { makeWhoAmI } from "../app/who-am-i";
+import { makeWithAttendanceQueryUnit } from "../infra/attendance/attendance-unit";
 import { systemClock } from "../infra/clock";
 import type { Database } from "../infra/db/connection";
 import { makeAccountDirectory, makeAccountLookup } from "../infra/google/accounts-sql";
 import { makeGoogleIdTokenVerifier } from "../infra/google/verify-id-token";
 import { uuidGenerator } from "../infra/ids";
+import { makeWithLedgerUnit } from "../infra/ledger/ledger-unit";
 import { makeLogger } from "../infra/logger";
 import { makeWithLoaderUnit } from "../infra/members/loader-unit";
 import { makeWithMemberQueryUnit } from "../infra/members/member-queries-unit";
 import { makeWithMemberSelfUnit } from "../infra/members/member-self-unit";
+import { makeWithPaymentUnit } from "../infra/payments/payments-unit";
 import { makeWithPlanUnit } from "../infra/plans/plans-unit";
 import { expiresAfter } from "../infra/sessions/session-lifetime";
 import { sessionTokens } from "../infra/sessions/session-tokens";
@@ -98,6 +109,8 @@ export function composeApp(deps: ComposeDeps) {
     clock: systemClock,
   };
   const withLoaderUnit = makeWithLoaderUnit(withTenantTx);
+  const ledger = { withUnit: makeWithLedgerUnit(withTenantTx), clock: systemClock };
+  const memberSelf = { withUnit: makeWithMemberSelfUnit(withTenantTx), clock: systemClock };
   const getTenant = makeGetTenant({ withUnit: withSettingsUnit });
   const resolvers: ResolverDeps = {
     signIn: makeSignIn({ google: { verify, accounts }, sessions, listMyGyms }),
@@ -117,8 +130,18 @@ export function composeApp(deps: ComposeDeps) {
     }),
     listMembers: makeListMembers(memberQueries),
     getMember: makeGetMember(memberQueries),
-    getOwnMember: makeGetOwnMember({
-      withUnit: makeWithMemberSelfUnit(withTenantTx),
+    getOwnMember: makeGetOwnMember(memberSelf),
+    invoices: makeMemberInvoices(ledger),
+    payments: makeMemberPayments(ledger),
+    discounts: makeMemberDiscounts(ledger),
+    membershipPeriods: makeMembershipHistory(ledger),
+    memberVisits: makeMemberHistory({
+      withUnit: makeWithAttendanceQueryUnit(withTenantTx),
+      clock: systemClock,
+    }),
+    ownVisits: makeGetOwnVisits(memberSelf),
+    previewPayment: makePreviewPayment({
+      withUnit: makeWithPaymentUnit(withTenantTx, { clock: systemClock, ids: uuidGenerator }),
       clock: systemClock,
     }),
   };
