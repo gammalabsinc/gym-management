@@ -3,6 +3,7 @@ import { PlaceholderScreen } from "../screens/PlaceholderScreen";
 import { Button } from "../ui/Button";
 import { CustomersScreen } from "./CustomersScreen";
 import { useCustomersService } from "./context";
+import { CustomerDetail } from "./detail/CustomerDetail";
 import { useCustomers, useDebounced } from "./useCustomers";
 
 export const SEARCH_DELAY_MS = 300;
@@ -10,24 +11,46 @@ export const SEARCH_DELAY_MS = 300;
 type Route =
   | { readonly kind: "list" }
   | { readonly kind: "add" }
-  | { readonly kind: "detail"; readonly id: string };
+  | { readonly kind: "detail"; readonly id: string }
+  /** Record payment and edit member are built in later tickets. */
+  | { readonly kind: "payment"; readonly id: string }
+  | { readonly kind: "edit"; readonly id: string };
 
-/** The Customers tab. Add member and the customer detail are built in later tickets. */
-export function Customers() {
+const PLACEHOLDER_TITLES = {
+  add: "Add member",
+  payment: "Record payment",
+  edit: "Edit member",
+} as const;
+
+/** The Customers tab: the list, and the detail of one customer. Add, payment and edit come later. */
+export function Customers(props: { readonly viewer: "staff" | "owner" }) {
   const service = useCustomersService();
   const [route, setRoute] = useState<Route>({ kind: "list" });
   const [search, setSearch] = useState("");
   const term = useDebounced(search, SEARCH_DELAY_MS);
   const list = useCustomers(service, term.trim());
 
+  if (route.kind === "detail") {
+    const { id } = route;
+    return (
+      <CustomerDetail
+        id={id}
+        viewer={props.viewer}
+        onBack={() => setRoute({ kind: "list" })}
+        onRecordPayment={() => setRoute({ kind: "payment", id })}
+        onEdit={() => setRoute({ kind: "edit", id })}
+      />
+    );
+  }
   if (route.kind !== "list") {
+    const back: Route = route.kind === "add" ? { kind: "list" } : { kind: "detail", id: route.id };
     return (
       <>
-        <PlaceholderScreen title={route.kind === "add" ? "Add member" : "Customer"} />
+        <PlaceholderScreen title={PLACEHOLDER_TITLES[route.kind]} />
         <Button
-          label="Back to customers"
+          label={route.kind === "add" ? "Back to customers" : "Back to customer"}
           kind="secondary"
-          onPress={() => setRoute({ kind: "list" })}
+          onPress={() => setRoute(back)}
         />
       </>
     );

@@ -20,12 +20,13 @@ const CUSTOMER_SCREENS = {
 };
 const STAFF_SCREENS = {
   Scan: () => <Scanner />,
-  Customers: () => <Customers />,
+  Customers: () => <Customers viewer="staff" />,
   Settings: () => <Settings viewer="staff" />,
   Staff: () => <Staff viewer="staff" />,
 };
 const OWNER_SCREENS = {
   ...STAFF_SCREENS,
+  Customers: () => <Customers viewer="owner" />,
   Settings: () => <Settings viewer="owner" />,
   Staff: () => <Staff viewer="owner" />,
 };

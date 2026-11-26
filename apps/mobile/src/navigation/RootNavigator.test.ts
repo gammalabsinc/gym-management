@@ -18,7 +18,8 @@ vi.mock("../scanner/Scanner", () => ({
   Scanner: () => createElement("div", null, "Scanner screen"),
 }));
 vi.mock("../customers/Customers", () => ({
-  Customers: () => createElement("div", null, "Customers screen"),
+  Customers: (props: { viewer: string }) =>
+    createElement("div", null, `Customers screen for ${props.viewer}`),
 }));
 vi.mock("../settings/Settings", () => ({
   Settings: (props: { viewer: string }) =>
@@ -83,7 +84,7 @@ describe("RootNavigator", () => {
     expect(screen.getByTestId("tab-Scan")).toBeTruthy();
     expect(screen.getByTestId("tab-Customers")).toBeTruthy();
     expect(screen.getByText("Scanner screen")).toBeTruthy();
-    expect(screen.getByText("Customers screen")).toBeTruthy();
+    expect(screen.getByText("Customers screen for staff")).toBeTruthy();
     expect(screen.queryByTestId("tab-Card")).toBeNull();
   });
 
@@ -93,6 +94,7 @@ describe("RootNavigator", () => {
     expect(screen.getByTestId("tab-Staff")).toBeTruthy();
     expect(screen.getByText("Settings for owner")).toBeTruthy();
     expect(screen.getByText("Staff for owner")).toBeTruthy();
+    expect(screen.getByText("Customers screen for owner")).toBeTruthy();
     cleanup();
     render(createElement(RootNavigator, { session: { status: "signedIn", role: "staff" } }));
     expect(screen.queryByTestId("tab-Settings")).toBeNull();
